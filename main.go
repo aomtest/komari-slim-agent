@@ -10,10 +10,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/komari-monitor/komari-agent/config"
 	"github.com/komari-monitor/komari-agent/monitoring"
+	"github.com/komari-monitor/komari-agent/update"
+)
 
-	"github.com/gorilla/websocket"
+var (
+	currentVersion = "v0.0.2"
+	repo           = "komari-monitor/komari-agent"
 )
 
 func main() {
@@ -42,6 +47,14 @@ func main() {
 
 	ticker := time.NewTicker(time.Duration(localConfig.Interval * float64(time.Second)))
 	defer ticker.Stop()
+
+	// Check for updates
+	go func() {
+		ticker_ := time.NewTicker(time.Duration(6) * time.Hour)
+		for range ticker_.C {
+			update_komari()
+		}
+	}()
 
 	for range ticker.C {
 		// If no connection, attempt to connect
@@ -80,6 +93,17 @@ func main() {
 			continue
 		}
 
+	}
+}
+
+func update_komari() {
+	// 初始化 Updater
+	updater := update.NewUpdater(currentVersion, repo)
+
+	// 检查并更新
+	err := updater.CheckAndUpdate()
+	if err != nil {
+		log.Fatalf("更新失败: %v", err)
 	}
 }
 
