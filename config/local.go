@@ -7,12 +7,13 @@ import (
 )
 
 type LocalConfig struct {
-	Endpoint          string `json:"endpoint"`
-	Token             string `json:"token"`
-	Terminal          bool   `json:"terminal"`
-	MaxRetries        int    `json:"maxRetries"`
-	ReconnectInterval int    `json:"reconnectInterval"`
-	IgnoreUnsafeCert bool   `json:"ignoreUnsafeCert"`
+	Endpoint          string  `json:"endpoint"`
+	Token             string  `json:"token"`
+	Terminal          bool    `json:"terminal"`
+	MaxRetries        int     `json:"maxRetries"`
+	ReconnectInterval int     `json:"reconnectInterval"`
+	IgnoreUnsafeCert  bool    `json:"ignoreUnsafeCert"`
+	Interval          float64 `json:"interval"`
 }
 
 func LoadConfig() (LocalConfig, error) {
@@ -24,7 +25,8 @@ func LoadConfig() (LocalConfig, error) {
 		path              string
 		maxRetries        int
 		reconnectInterval int
-		ignoreUnsafeCert bool
+		ignoreUnsafeCert  bool
+		interval          float64
 	)
 
 	flag.StringVar(&endpoint, "e", "", "The endpoint URL")
@@ -33,7 +35,8 @@ func LoadConfig() (LocalConfig, error) {
 	flag.StringVar(&path, "c", "agent.json", "Path to the configuration file")
 	flag.IntVar(&maxRetries, "maxRetries", 10, "Maximum number of retries for WebSocket connection")
 	flag.IntVar(&reconnectInterval, "reconnectInterval", 5, "Reconnect interval in seconds")
-	flag.BoolVar(&ignoreUnsafeCert,"ignoreUnsafeCert", false, "Ignore unsafe certificate errors")	
+	flag.Float64Var(&interval, "interval", 1.1, "Interval in seconds for sending data to the server")
+	flag.BoolVar(&ignoreUnsafeCert, "ignoreUnsafeCert", false, "Ignore unsafe certificate errors")
 	flag.Parse()
 
 	// Ensure -c cannot coexist with other flags
@@ -63,6 +66,7 @@ func LoadConfig() (LocalConfig, error) {
 		Terminal:          terminal,
 		MaxRetries:        maxRetries,
 		ReconnectInterval: reconnectInterval,
-		IgnoreUnsafeCert: ignoreUnsafeCert,
+		IgnoreUnsafeCert:  ignoreUnsafeCert,
+		Interval:          interval,
 	}, nil
 }

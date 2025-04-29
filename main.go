@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"komari/config"
-	"komari/monitoring"
 	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/komari-monitor/komari-agent/config"
+	"github.com/komari-monitor/komari-agent/monitoring"
 
 	"github.com/gorilla/websocket"
 )
@@ -23,13 +24,6 @@ func main() {
 	if localConfig.IgnoreUnsafeCert {
 		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-
-	remoteConfig, err := config.LoadRemoteConfig(localConfig.Endpoint, localConfig.Token)
-	if err != nil {
-		log.Fatalln("Failed to load remote config:", err)
-	}
-
-	//log.Println("Remote Config:", remoteConfig)
 
 	err = uploadBasicInfo(localConfig.Endpoint, localConfig.Token)
 	if err != nil {
@@ -46,7 +40,7 @@ func main() {
 		}
 	}()
 
-	ticker := time.NewTicker(time.Duration(remoteConfig.Interval * int(time.Second)))
+	ticker := time.NewTicker(time.Duration(localConfig.Interval * float64(time.Second)))
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -58,7 +52,7 @@ func main() {
 				conn, err = connectWebSocket(websocketEndpoint, localConfig.Endpoint, localConfig.Token)
 				if err == nil {
 					log.Println("WebSocket connected")
-					go handleWebSocketMessages(localConfig, remoteConfig, conn, make(chan struct{}))
+					go handleWebSocketMessages(localConfig, conn, make(chan struct{}))
 					break
 				}
 				retry++
@@ -68,7 +62,7 @@ func main() {
 			if retry >= localConfig.MaxRetries {
 				log.Println("Max retries reached, falling back to POST")
 				// Send report via POST and continue
-				data := report(localConfig, remoteConfig)
+				data := report(localConfig)
 				if err := reportWithPOST(localConfig.Endpoint, data); err != nil {
 					log.Println("Failed to send POST report:", err)
 				}
@@ -77,7 +71,7 @@ func main() {
 		}
 
 		// Send report via WebSocket
-		data := report(localConfig, remoteConfig)
+		data := report(localConfig)
 		err = conn.WriteMessage(websocket.TextMessage, data)
 		if err != nil {
 			log.Println("Failed to send WebSocket message:", err)
@@ -108,7 +102,7 @@ func connectWebSocket(websocketEndpoint, endpoint, token string) (*websocket.Con
 	return conn, nil
 }
 
-func handleWebSocketMessages(localConfig config.LocalConfig, remoteConfig config.RemoteConfig, conn *websocket.Conn, done chan<- struct{}) {
+func handleWebSocketMessages(localConfig config.LocalConfig, conn *websocket.Conn, done chan<- struct{}) {
 	defer close(done)
 	for {
 		_, message_raw, err := conn.ReadMessage()
@@ -152,15 +146,18 @@ func reportWithPOST(endpoint string, data []byte) error {
 
 func uploadBasicInfo(endpoint string, token string) error {
 	cpu := monitoring.Cpu()
+
 	osname := monitoring.OSName()
+	ipv4, ipv6, _ := monitoring.GetIPAddress()
+
 	data := map[string]interface{}{
-		"token": token,
-		"cpu": map[string]interface{}{
-			"name":  cpu.CPUName,
-			"cores": cpu.CPUCores,
-			"arch":  cpu.CPUArchitecture,
-		},
-		"os": osname,
+		"cpu_name":  cpu.CPUName,
+		"cpu_cores": cpu.CPUCores,
+		"arch":      cpu.CPUArchitecture,
+		"os":        osname,
+		"ipv4":      ipv4,
+		"ipv6":      ipv6,
+		"gpu_name":  "Unknown",
 	}
 
 	endpoint = strings.TrimSuffix(endpoint, "/") + "/api/clients/uploadBasicInfo?token=" + token
@@ -195,79 +192,68 @@ func uploadBasicInfo(endpoint string, token string) error {
 	return nil
 }
 
-func report(localConfig config.LocalConfig, remoteConfig config.RemoteConfig) []byte {
+func report(localConfig config.LocalConfig) []byte {
 	message := ""
-	data := map[string]interface{}{
-		"token": localConfig.Token,
+	data := map[string]interface{}{}
+
+	cpu := monitoring.Cpu()
+	data["cpu"] = map[string]interface{}{
+		"usage": cpu.CPUUsage,
 	}
-	if remoteConfig.Cpu {
-		cpu := monitoring.Cpu()
-		data["cpu"] = map[string]interface{}{
-			"usage": cpu.CPUUsage,
-		}
+
+	ram := monitoring.Ram()
+	data["ram"] = map[string]interface{}{
+		"total": ram.Total,
+		"used":  ram.Used,
 	}
-	if remoteConfig.Ram {
-		ram := monitoring.Ram()
-		data["ram"] = map[string]interface{}{
-			"total": ram.Total,
-			"used":  ram.Used,
-		}
+
+	swap := monitoring.Swap()
+	data["swap"] = map[string]interface{}{
+		"total": swap.Total,
+		"used":  swap.Used,
 	}
-	if remoteConfig.Swap {
-		swap := monitoring.Swap()
-		data["swap"] = map[string]interface{}{
-			"total": swap.Total,
-			"used":  swap.Used,
-		}
+	load := monitoring.Load()
+	data["load"] = map[string]interface{}{
+		"load1":  load.Load1,
+		"load5":  load.Load5,
+		"load15": load.Load15,
 	}
-	if remoteConfig.Load {
-		load := monitoring.Load()
-		data["load"] = map[string]interface{}{
-			"load1":  load.Load1,
-			"load5":  load.Load5,
-			"load15": load.Load15,
-		}
+
+	disk := monitoring.Disk()
+	data["disk"] = map[string]interface{}{
+		"total": disk.Total,
+		"used":  disk.Used,
 	}
-	if remoteConfig.Disk {
-		disk := monitoring.Disk()
-		data["disk"] = map[string]interface{}{
-			"total": disk.Total,
-			"used":  disk.Used,
-		}
+
+	totalUp, totalDown, networkUp, networkDown, err := monitoring.NetworkSpeed(int(localConfig.Interval))
+	if err != nil {
+		message += fmt.Sprintf("failed to get network speed: %v\n", err)
 	}
-	if remoteConfig.Network {
-		totalUp, totalDown, networkUp, networkDown, err := monitoring.NetworkSpeed(remoteConfig.Interval)
-		if err != nil {
-			message += fmt.Sprintf("failed to get network speed: %v\n", err)
-		}
-		data["network"] = map[string]interface{}{
-			"up":        networkUp,
-			"down":      networkDown,
-			"totalUp":   totalUp,
-			"totalDown": totalDown,
-		}
+	data["network"] = map[string]interface{}{
+		"up":        networkUp,
+		"down":      networkDown,
+		"totalUp":   totalUp,
+		"totalDown": totalDown,
 	}
-	if remoteConfig.Connections {
-		tcpCount, udpCount, err := monitoring.ConnectionsCount()
-		if err != nil {
-			message += fmt.Sprintf("failed to get connections: %v\n", err)
-		}
-		data["connections"] = map[string]interface{}{
-			"tcp": tcpCount,
-			"udp": udpCount,
-		}
+
+	tcpCount, udpCount, err := monitoring.ConnectionsCount()
+	if err != nil {
+		message += fmt.Sprintf("failed to get connections: %v\n", err)
 	}
-	if remoteConfig.Uptime {
-		uptime, err := monitoring.Uptime()
-		if err != nil {
-			message += fmt.Sprintf("failed to get uptime: %v\n", err)
-		}
-		data["uptime"] = uptime
+	data["connections"] = map[string]interface{}{
+		"tcp": tcpCount,
+		"udp": udpCount,
 	}
-	if remoteConfig.Process {
-		processcount := monitoring.ProcessCount()
-		data["process"] = processcount
+
+	uptime, err := monitoring.Uptime()
+	if err != nil {
+		message += fmt.Sprintf("failed to get uptime: %v\n", err)
 	}
+	data["uptime"] = uptime
+
+	processcount := monitoring.ProcessCount()
+	data["process"] = processcount
+
 	data["message"] = message
 
 	s, err := json.Marshal(data)

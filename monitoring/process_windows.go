@@ -1,38 +1,17 @@
+//go:build windows
+// +build windows
+
 package monitoring
 
 import (
-	"os"
-	"runtime"
-	"strconv"
 	"syscall"
 	"unsafe"
 )
 
 // ProcessCount returns the number of running processes
 func ProcessCount() (count int) {
-	if runtime.GOOS == "windows" {
-		return processCountWindows()
-	}
-	return processCountLinux()
-}
+	return processCountWindows()
 
-// processCountLinux counts processes by reading /proc directory
-func processCountLinux() (count int) {
-	procDir := "/proc"
-
-	entries, err := os.ReadDir(procDir)
-	if err != nil {
-		return 0
-	}
-
-	for _, entry := range entries {
-		if _, err := strconv.ParseInt(entry.Name(), 10, 64); err == nil {
-			//if _, err := filepath.ParseInt(entry.Name(), 10, 64); err == nil {
-			count++
-		}
-	}
-
-	return count
 }
 
 // processCountWindows counts processes using Windows API
