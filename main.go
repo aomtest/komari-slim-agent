@@ -30,8 +30,12 @@ func main() {
 	if localConfig.IgnoreUnsafeCert {
 		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-
+	err = uploadBasicInfo(localConfig.Endpoint, localConfig.Token)
+	if err != nil {
+		log.Fatalln("Failed to upload basic info:", err)
+	}
 	go func() {
+		err = uploadBasicInfo(localConfig.Endpoint, localConfig.Token)
 		ticker := time.NewTicker(time.Duration(time.Minute * 15))
 		for range ticker.C {
 			err = uploadBasicInfo(localConfig.Endpoint, localConfig.Token)
@@ -169,19 +173,24 @@ func reportWithPOST(endpoint string, data []byte) error {
 }
 
 func uploadBasicInfo(endpoint string, token string) error {
+	log.Println("Uploading basic info...")
+	defer log.Println("Upload complete")
 	cpu := monitoring.Cpu()
 
 	osname := monitoring.OSName()
 	ipv4, ipv6, _ := monitoring.GetIPAddress()
 
 	data := map[string]interface{}{
-		"cpu_name":  cpu.CPUName,
-		"cpu_cores": cpu.CPUCores,
-		"arch":      cpu.CPUArchitecture,
-		"os":        osname,
-		"ipv4":      ipv4,
-		"ipv6":      ipv6,
-		"gpu_name":  "Unknown",
+		"cpu_name":   cpu.CPUName,
+		"cpu_cores":  cpu.CPUCores,
+		"arch":       cpu.CPUArchitecture,
+		"os":         osname,
+		"ipv4":       ipv4,
+		"ipv6":       ipv6,
+		"mem_total":  monitoring.Ram().Total,
+		"swap_total": monitoring.Swap().Total,
+		"disk_total": monitoring.Disk().Total,
+		"gpu_name":   "Unknown",
 	}
 
 	endpoint = strings.TrimSuffix(endpoint, "/") + "/api/clients/uploadBasicInfo?token=" + token
