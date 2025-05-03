@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -18,17 +17,9 @@ import (
 )
 
 var (
-	CurrentVersion = getVersionFromEnv()
+	CurrentVersion string
 	repo           = "komari-monitor/komari-agent"
 )
-
-func getVersionFromEnv() string {
-	version := "v0.0.2"
-	if v := os.Getenv("GITHUB_RELEASE_VERSION"); v != "" {
-		version = v
-	}
-	return version
-}
 
 func main() {
 	log.Printf("Komari Agent %s\n", CurrentVersion)
