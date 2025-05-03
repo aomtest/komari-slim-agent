@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -17,11 +18,20 @@ import (
 )
 
 var (
-	currentVersion = "v0.0.2"
+	CurrentVersion = getVersionFromEnv()
 	repo           = "komari-monitor/komari-agent"
 )
 
+func getVersionFromEnv() string {
+	version := "v0.0.2"
+	if v := os.Getenv("GITHUB_RELEASE_VERSION"); v != "" {
+		version = v
+	}
+	return version
+}
+
 func main() {
+	log.Printf("Komari Agent %s\n", CurrentVersion)
 	localConfig, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalln("Failed to load local config:", err)
@@ -30,10 +40,15 @@ func main() {
 		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
-	err = uploadBasicInfo(localConfig.Endpoint, localConfig.Token)
-	if err != nil {
-		log.Fatalln("Failed to upload basic info:", err)
-	}
+	go func() {
+		ticker := time.NewTicker(time.Duration(time.Minute * 15))
+		for range ticker.C {
+			err = uploadBasicInfo(localConfig.Endpoint, localConfig.Token)
+			if err != nil {
+				log.Fatalln("Failed to upload basic info:", err)
+			}
+		}
+	}()
 
 	websocketEndpoint := strings.TrimSuffix(localConfig.Endpoint, "/") + "/api/clients/report?token=" + localConfig.Token
 	websocketEndpoint = "ws" + strings.TrimPrefix(websocketEndpoint, "http")
@@ -62,7 +77,7 @@ func main() {
 			log.Println("Attempting to connect to WebSocket...")
 			retry := 0
 			for retry < localConfig.MaxRetries {
-				conn, err = connectWebSocket(websocketEndpoint, localConfig.Endpoint, localConfig.Token)
+				conn, err = connectWebSocket(websocketEndpoint)
 				if err == nil {
 					log.Println("WebSocket connected")
 					go handleWebSocketMessages(localConfig, conn, make(chan struct{}))
@@ -98,7 +113,7 @@ func main() {
 
 func update_komari() {
 	// 初始化 Updater
-	updater := update.NewUpdater(currentVersion, repo)
+	updater := update.NewUpdater(CurrentVersion, repo)
 
 	// 检查并更新
 	err := updater.CheckAndUpdate()
@@ -108,19 +123,13 @@ func update_komari() {
 }
 
 // connectWebSocket attempts to establish a WebSocket connection and upload basic info
-func connectWebSocket(websocketEndpoint, endpoint, token string) (*websocket.Conn, error) {
+func connectWebSocket(websocketEndpoint string) (*websocket.Conn, error) {
 	dialer := &websocket.Dialer{
 		HandshakeTimeout: 5 * time.Second,
 	}
 	conn, _, err := dialer.Dial(websocketEndpoint, nil)
 	if err != nil {
 		return nil, err
-	}
-
-	// Upload basic info after successful connection
-	if err := uploadBasicInfo(endpoint, token); err != nil {
-		log.Println("Failed to upload basic info:", err)
-		// Note: We don't return error here to allow the connection to proceed
 	}
 
 	return conn, nil
