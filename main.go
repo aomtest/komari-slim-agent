@@ -191,6 +191,7 @@ func uploadBasicInfo(endpoint string, token string) error {
 		"swap_total": monitoring.Swap().Total,
 		"disk_total": monitoring.Disk().Total,
 		"gpu_name":   "Unknown",
+		"version":    CurrentVersion,
 	}
 
 	endpoint = strings.TrimSuffix(endpoint, "/") + "/api/clients/uploadBasicInfo?token=" + token
