@@ -112,7 +112,7 @@ func update_komari() {
 	// 检查并更新
 	err := updater.CheckAndUpdate()
 	if err != nil {
-		log.Fatalf("Update Failed: %v", err)
+		log.Println("Update Failed: %v", err)
 	}
 }
 
