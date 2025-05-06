@@ -2,6 +2,8 @@ package update
 
 import (
 	"fmt"
+	"log"
+	"os"
 
 	"github.com/blang/semver"
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
@@ -21,6 +23,7 @@ func NewUpdater(currentVersion, repo string) *Updater {
 
 // 检查更新并执行自动更新
 func (u *Updater) CheckAndUpdate() error {
+	log.Println("Checking update...")
 	// 解析当前版本
 	currentSemVer, err := semver.Parse(u.CurrentVersion)
 	if err != nil {
@@ -45,8 +48,19 @@ func (u *Updater) CheckAndUpdate() error {
 		fmt.Println("当前版本已是最新版本:", u.CurrentVersion)
 		return nil
 	}
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("获取当前执行路径失败: %v", err)
+	}
 
+	_, err = os.StartProcess(execPath, os.Args, &os.ProcAttr{
+		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+	})
+	if err != nil {
+		return fmt.Errorf("重新启动程序失败: %v", err)
+	}
 	fmt.Printf("成功更新到版本 %s\n", latest.Version)
 	fmt.Printf("发布说明:\n%s\n", latest.ReleaseNotes)
+	os.Exit(0)
 	return nil
 }

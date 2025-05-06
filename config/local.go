@@ -14,6 +14,7 @@ type LocalConfig struct {
 	ReconnectInterval int     `json:"reconnectInterval"`
 	IgnoreUnsafeCert  bool    `json:"ignoreUnsafeCert"`
 	Interval          float64 `json:"interval"`
+	AutoUpdate        bool    `json:"autoUpdate"`
 }
 
 func LoadConfig() (LocalConfig, error) {
@@ -27,6 +28,7 @@ func LoadConfig() (LocalConfig, error) {
 		reconnectInterval int
 		ignoreUnsafeCert  bool
 		interval          float64
+		autoUpdate        bool
 	)
 
 	flag.StringVar(&endpoint, "e", "", "The endpoint URL")
@@ -37,6 +39,7 @@ func LoadConfig() (LocalConfig, error) {
 	flag.IntVar(&reconnectInterval, "reconnectInterval", 5, "Reconnect interval in seconds")
 	flag.Float64Var(&interval, "interval", 1.1, "Interval in seconds for sending data to the server")
 	flag.BoolVar(&ignoreUnsafeCert, "ignoreUnsafeCert", false, "Ignore unsafe certificate errors")
+	flag.BoolVar(&autoUpdate, "autoUpdate", false, "Enable or disable auto update (default: false)")
 	flag.Parse()
 
 	// Ensure -c cannot coexist with other flags
@@ -68,5 +71,6 @@ func LoadConfig() (LocalConfig, error) {
 		ReconnectInterval: reconnectInterval,
 		IgnoreUnsafeCert:  ignoreUnsafeCert,
 		Interval:          interval,
+		AutoUpdate:        autoUpdate,
 	}, nil
 }

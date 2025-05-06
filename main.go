@@ -17,8 +17,8 @@ import (
 )
 
 var (
-	CurrentVersion string
-	repo           = "komari-monitor/komari-agent"
+	CurrentVersion string = "0.0.1"
+	repo                  = "komari-monitor/komari-agent"
 )
 
 func main() {
@@ -30,10 +30,7 @@ func main() {
 	if localConfig.IgnoreUnsafeCert {
 		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	err = uploadBasicInfo(localConfig.Endpoint, localConfig.Token)
-	if err != nil {
-		log.Fatalln("Failed to upload basic info:", err)
-	}
+
 	go func() {
 		err = uploadBasicInfo(localConfig.Endpoint, localConfig.Token)
 		ticker := time.NewTicker(time.Duration(time.Minute * 15))
@@ -58,13 +55,15 @@ func main() {
 	ticker := time.NewTicker(time.Duration(localConfig.Interval * float64(time.Second)))
 	defer ticker.Stop()
 
-	// Check for updates
-	go func() {
-		ticker_ := time.NewTicker(time.Duration(6) * time.Hour)
-		for range ticker_.C {
+	if localConfig.AutoUpdate {
+		go func() {
+			ticker_ := time.NewTicker(time.Duration(6) * time.Hour)
 			update_komari()
-		}
-	}()
+			for range ticker_.C {
+				update_komari()
+			}
+		}()
+	}
 
 	for range ticker.C {
 		// If no connection, attempt to connect
@@ -113,7 +112,7 @@ func update_komari() {
 	// 检查并更新
 	err := updater.CheckAndUpdate()
 	if err != nil {
-		log.Fatalf("更新失败: %v", err)
+		log.Fatalf("Update Failed: %v", err)
 	}
 }
 
