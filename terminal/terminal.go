@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gorilla/websocket"
+	"github.com/komari-monitor/komari-agent/cmd/flags"
 )
 
 // Terminal 接口定义平台特定的终端操作
@@ -25,6 +26,11 @@ type terminalImpl struct {
 
 // StartTerminal 启动终端并处理 WebSocket 通信
 func StartTerminal(conn *websocket.Conn) {
+	if flags.DisableWebSsh {
+		conn.WriteMessage(websocket.TextMessage, []byte("\n\nWeb SSH is disabled. Enable it by running without the --disable-web-ssh flag."))
+		conn.Close()
+		return
+	}
 	impl, err := newTerminalImpl()
 	if err != nil {
 		conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Error: %v\r\n", err)))
