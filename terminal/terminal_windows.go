@@ -4,105 +4,77 @@ package terminal
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 
 	"github.com/UserExistsError/conpty"
-	"github.com/gorilla/websocket"
 )
 
-// StartTerminal 在Windows系统上启动终端
-func StartTerminal(conn *websocket.Conn) {
-	// 创建进程
+func newTerminalImpl() (*terminalImpl, error) {
+	// 查找 shell
 	shell, err := exec.LookPath("powershell.exe")
 	if err != nil || shell == "" {
 		shell = "cmd.exe"
 	}
-	current_dir := "."
-	executable, err := os.Executable()
-	if err == nil {
-		current_dir = filepath.Dir(executable)
-	}
-	if shell == "" || current_dir == "" {
-		conn.WriteMessage(websocket.TextMessage, []byte("No supported shell found."))
-		return
+	if shell == "" {
+		return nil, fmt.Errorf("no supported shell found")
 	}
 
-	tty, err := conpty.Start(shell, conpty.ConPtyWorkDir(current_dir))
-	if err != nil {
-		conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Error: %v\r\n", err)))
-		return
+	// 获取工作目录
+	workingDir := "."
+	if executable, err := os.Executable(); err == nil {
+		workingDir = filepath.Dir(executable)
 	}
-	defer tty.Close()
-	err_chan := make(chan error, 1)
-	// 设置终端大小
+
+	// 启动 ConPTY
+	tty, err := conpty.Start(shell, conpty.ConPtyWorkDir(workingDir))
+	if err != nil {
+		return nil, fmt.Errorf("failed to start conpty: %v", err)
+	}
+
+	// 设置初始终端大小
 	tty.Resize(80, 24)
 
-	go func() {
-		for {
-			t, p, err := conn.ReadMessage()
-			if err != nil {
-				err_chan <- err
-				return
-			}
-			if t == websocket.TextMessage {
-				var cmd struct {
-					Type  string `json:"type"`
-					Cols  int    `json:"cols,omitempty"`
-					Rows  int    `json:"rows,omitempty"`
-					Input string `json:"input,omitempty"`
-				}
+	return &terminalImpl{
+		shell:      shell,
+		workingDir: workingDir,
+		term: &windowsTerminal{
+			tty: tty,
+		},
+	}, nil
+}
 
-				if err := json.Unmarshal(p, &cmd); err == nil {
-					switch cmd.Type {
-					case "resize":
-						if cmd.Cols > 0 && cmd.Rows > 0 {
-							tty.Resize(cmd.Cols, cmd.Rows)
-						}
-					case "input":
-						if cmd.Input != "" {
-							tty.Write([]byte(cmd.Input))
-						}
-					}
-				} else {
-					tty.Write(p)
-				}
-			}
-			if t == websocket.BinaryMessage {
-				tty.Write(p)
-			}
-		}
-	}()
+type windowsTerminal struct {
+	tty    *conpty.ConPty
+	closed bool
+}
 
-	go func() {
-		buf := make([]byte, 4096)
-		for {
-			n, err := tty.Read(buf)
-			if err != nil {
-				err_chan <- err
-				return
-			}
+func (t *windowsTerminal) Close() error {
+	if t.closed {
+		return nil
+	}
+	if err := t.tty.Close(); err != nil {
+		return err
+	}
+	t.closed = true
+	return nil
+}
 
-			err = conn.WriteMessage(websocket.BinaryMessage, buf[:n])
-			if err != nil {
-				err_chan <- err
-				return
-			}
-		}
-	}()
+func (t *windowsTerminal) Read(p []byte) (int, error) {
+	return t.tty.Read(p)
+}
 
-	go func() {
-		err := <-err_chan
-		if err != nil && tty != nil {
-			conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Error: %v\r\n", err)))
-		}
-		conn.Close()
-		tty.Close()
-	}()
-	tty.Wait(context.Background())
-	tty.Close()
+func (t *windowsTerminal) Write(p []byte) (int, error) {
+	return t.tty.Write(p)
+}
 
+func (t *windowsTerminal) Resize(cols, rows int) error {
+	return t.tty.Resize(cols, rows)
+}
+
+func (t *windowsTerminal) Wait() error {
+	_, err := t.tty.Wait(context.Background())
+	return err
 }
