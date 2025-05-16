@@ -4,63 +4,64 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/blang/semver"
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
 )
 
-type Updater struct {
-	CurrentVersion string // 当前版本
-	Repo           string // GitHub 仓库，例如 "komari-monitor/komari-agent"
-}
+var (
+	CurrentVersion string = "0.0.1"
+	Repo           string = "komari-monitor/komari-agent"
+)
 
-func NewUpdater(currentVersion, repo string) *Updater {
-	return &Updater{
-		CurrentVersion: currentVersion,
-		Repo:           repo,
+func DoUpdateWorks() {
+	ticker_ := time.NewTicker(time.Duration(6) * time.Hour)
+	for range ticker_.C {
+		CheckAndUpdate()
 	}
 }
 
 // 检查更新并执行自动更新
-func (u *Updater) CheckAndUpdate() error {
+func CheckAndUpdate() error {
 	log.Println("Checking update...")
-	// 解析当前版本
-	currentSemVer, err := semver.Parse(u.CurrentVersion)
+	// Parse current version
+	currentSemVer, err := semver.Parse(CurrentVersion)
 	if err != nil {
-		return fmt.Errorf("解析当前版本失败: %v", err)
+		return fmt.Errorf("failed to parse current version: %v", err)
 	}
 
-	// 创建 selfupdate 配置
+	// Create selfupdate configuration
 	config := selfupdate.Config{}
 	updater, err := selfupdate.NewUpdater(config)
 	if err != nil {
-		return fmt.Errorf("创建 updater 失败: %v", err)
+		return fmt.Errorf("failed to create updater: %v", err)
 	}
 
-	// 检查最新版本
-	latest, err := updater.UpdateSelf(currentSemVer, u.Repo)
+	// Check for latest version
+	latest, err := updater.UpdateSelf(currentSemVer, Repo)
 	if err != nil {
-		return fmt.Errorf("检查更新失败: %v", err)
+		return fmt.Errorf("failed to check for updates: %v", err)
 	}
 
-	// 判断是否需要更新
+	// Determine if update is needed
 	if latest.Version.Equals(currentSemVer) {
-		fmt.Println("当前版本已是最新版本:", u.CurrentVersion)
+		fmt.Println("Current version is the latest:", CurrentVersion)
 		return nil
 	}
-	execPath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("获取当前执行路径失败: %v", err)
-	}
+	// Default is installed as a service, so don't automatically restart
+	//execPath, err := os.Executable()
+	//if err != nil {
+	//	return fmt.Errorf("failed to get current executable path: %v", err)
+	//}
 
-	_, err = os.StartProcess(execPath, os.Args, &os.ProcAttr{
-		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
-	})
-	if err != nil {
-		return fmt.Errorf("重新启动程序失败: %v", err)
-	}
-	fmt.Printf("成功更新到版本 %s\n", latest.Version)
-	fmt.Printf("发布说明:\n%s\n", latest.ReleaseNotes)
+	// _, err = os.StartProcess(execPath, os.Args, &os.ProcAttr{
+	// 	Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+	// })
+	// if err != nil {
+	// 	return fmt.Errorf("failed to restart program: %v", err)
+	// }
+	fmt.Printf("Successfully updated to version %s\n", latest.Version)
 	os.Exit(0)
 	return nil
 }
