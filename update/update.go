@@ -62,6 +62,6 @@ func CheckAndUpdate() error {
 	// 	return fmt.Errorf("failed to restart program: %v", err)
 	// }
 	fmt.Printf("Successfully updated to version %s\n", latest.Version)
-	os.Exit(0)
+	os.Exit(42)
 	return nil
 }
