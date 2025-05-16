@@ -9,6 +9,34 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Function to uninstall the previous installation
+uninstall_previous() {
+    echo "Checking for previous installation..."
+    
+    # Stop and disable service if it exists
+    if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -q "${service_name}.service"; then
+        echo "Stopping and disabling existing systemd service..."
+        systemctl stop ${service_name}.service
+        systemctl disable ${service_name}.service
+        rm -f "/etc/systemd/system/${service_name}.service"
+        systemctl daemon-reload
+    elif command -v rc-service >/dev/null 2>&1 && [ -f "/etc/init.d/${service_name}" ]; then
+        echo "Stopping and disabling existing OpenRC service..."
+        rc-service ${service_name} stop
+        rc-update del ${service_name} default
+        rm -f "/etc/init.d/${service_name}"
+    fi
+    
+    # Remove old binary if it exists
+    if [ -f "$komari_agent_path" ]; then
+        echo "Removing old binary..."
+        rm -f "$komari_agent_path"
+    fi
+}
+
+# Uninstall previous installation
+uninstall_previous
+
 install_dependencies() {
     echo "Checking and installing dependencies..."
 
@@ -107,7 +135,7 @@ After=network.target
 Type=simple
 ExecStart=${komari_agent_path} ${komari_args}
 WorkingDirectory=${target_dir}
-Restart=on-failure
+Restart=always
 User=root
 
 [Install]
