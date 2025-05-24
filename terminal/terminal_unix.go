@@ -6,28 +6,62 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 
 	"github.com/creack/pty"
 )
 
 func newTerminalImpl() (*terminalImpl, error) {
-	// 查找可用 shell
-	defaultShells := []string{"zsh", "bash", "sh"}
-	shell := ""
-	for _, s := range defaultShells {
-		if _, err := exec.LookPath(s); err == nil {
-			shell = s
-			break
+	// 优先获取用户默认 shell
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		// 如果 SHELL 环境变量为空，尝试从 /etc/passwd 获取
+		user, err := os.UserHomeDir() // 当前用户
+		if err == nil {
+			passwd, err := os.ReadFile("/etc/passwd")
+			if err == nil {
+				for _, line := range strings.Split(string(passwd), "\n") {
+					if strings.Contains(line, user) {
+						parts := strings.Split(line, ":")
+						if len(parts) >= 7 && parts[6] != "" {
+							shell = parts[6]
+							break
+						}
+					}
+				}
+			}
 		}
 	}
+
+	// 验证 shell 是否可用
+	if shell != "" {
+		if _, err := exec.LookPath(shell); err != nil {
+			shell = "" // 默认 shell 不可用，清空以进入回退逻辑
+		}
+	}
+
+	// 回退到默认 shell 列表
+	defaultShells := []string{"zsh", "bash", "sh"}
+	if shell == "" {
+		for _, s := range defaultShells {
+			if _, err := exec.LookPath(s); err == nil {
+				shell = s
+				break
+			}
+		}
+	}
+
 	if shell == "" {
 		return nil, fmt.Errorf("no supported shell found")
 	}
-
 	// 创建进程
 	cmd := exec.Command(shell)
-	cmd.Env = append(cmd.Env, "TERM=xterm-256color")
+	cmd.Env = append(os.Environ(), // 继承系统环境变量
+		"TERM=xterm-256color",
+		"LANG=C.UTF-8",
+		"LC_ALL=C.UTF-8",
+	)
 	tty, err := pty.Start(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start pty: %v", err)
