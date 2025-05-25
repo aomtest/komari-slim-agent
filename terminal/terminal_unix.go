@@ -13,21 +13,18 @@ import (
 )
 
 func newTerminalImpl() (*terminalImpl, error) {
-	// 优先获取用户默认 shell
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		// 如果 SHELL 环境变量为空，尝试从 /etc/passwd 获取
-		user, err := os.UserHomeDir() // 当前用户
+	shell := ""
+	// 从 /etc/passwd 获取
+	user, err := os.UserHomeDir() // 当前用户
+	if err == nil {
+		passwd, err := os.ReadFile("/etc/passwd")
 		if err == nil {
-			passwd, err := os.ReadFile("/etc/passwd")
-			if err == nil {
-				for _, line := range strings.Split(string(passwd), "\n") {
-					if strings.Contains(line, user) {
-						parts := strings.Split(line, ":")
-						if len(parts) >= 7 && parts[6] != "" {
-							shell = parts[6]
-							break
-						}
+			for _, line := range strings.Split(string(passwd), "\n") {
+				if strings.Contains(line, user) {
+					parts := strings.Split(line, ":")
+					if len(parts) >= 7 && parts[6] != "" {
+						shell = parts[6]
+						break
 					}
 				}
 			}
