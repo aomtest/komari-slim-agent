@@ -44,7 +44,7 @@ func uploadBasicInfo() error {
 		"mem_total":  monitoring.Ram().Total,
 		"swap_total": monitoring.Swap().Total,
 		"disk_total": monitoring.Disk().Total,
-		"gpu_name":   "Unknown",
+		"gpu_name":   monitoring.GpuName(),
 		"version":    update.CurrentVersion,
 	}
 
