@@ -1,27 +1,107 @@
 #!/bin/bash
+
+# Color definitions for terminal output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+NC='\033[0m' # No Color
+
+# Logging functions
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+log_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+log_step() {
+    echo -e "${PURPLE}[STEP]${NC} $1"
+}
+
+log_config() {
+    echo -e "${CYAN}[CONFIG]${NC} $1"
+}
+
+# Default values
 service_name="komari-agent"
 target_dir="/opt/komari"
+github_proxy=""
+
+# Parse install-specific arguments
+komari_args=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --install-dir)
+            target_dir="$2"
+            shift 2
+            ;;
+        --install-service-name)
+            service_name="$2"
+            shift 2
+            ;;
+        --install-ghproxy)
+            github_proxy="$2"
+            shift 2
+            ;;
+        --install*)
+            log_warning "Unknown install parameter: $1"
+            shift
+            ;;
+        *)
+            # Non-install arguments go to komari_args
+            komari_args="$komari_args $1"
+            shift
+            ;;
+    esac
+done
+
+# Remove leading space from komari_args if present
+komari_args="${komari_args# }"
+
 komari_agent_path="${target_dir}/agent"
-komari_args="$@"
 
 if [ "$EUID" -ne 0 ]; then
-    echo "Error: Please run as root"
+    log_error "Please run as root"
     exit 1
 fi
 
+echo -e "${WHITE}===========================================${NC}"
+echo -e "${WHITE}    Komari Agent Installation Script     ${NC}"
+echo -e "${WHITE}===========================================${NC}"
+echo ""
+log_config "Installation configuration:"
+log_config "  Service name: ${GREEN}$service_name${NC}"
+log_config "  Install directory: ${GREEN}$target_dir${NC}"
+log_config "  GitHub proxy: ${GREEN}${github_proxy:-"(direct)"}${NC}"
+log_config "  Binary arguments: ${GREEN}$komari_args${NC}"
+echo ""
+
 # Function to uninstall the previous installation
 uninstall_previous() {
-    echo "Checking for previous installation..."
+    log_step "Checking for previous installation..."
     
     # Stop and disable service if it exists
     if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -q "${service_name}.service"; then
-        echo "Stopping and disabling existing systemd service..."
+        log_info "Stopping and disabling existing systemd service..."
         systemctl stop ${service_name}.service
         systemctl disable ${service_name}.service
         rm -f "/etc/systemd/system/${service_name}.service"
         systemctl daemon-reload
     elif command -v rc-service >/dev/null 2>&1 && [ -f "/etc/init.d/${service_name}" ]; then
-        echo "Stopping and disabling existing OpenRC service..."
+        log_info "Stopping and disabling existing OpenRC service..."
         rc-service ${service_name} stop
         rc-update del ${service_name} default
         rm -f "/etc/init.d/${service_name}"
@@ -29,7 +109,7 @@ uninstall_previous() {
     
     # Remove old binary if it exists
     if [ -f "$komari_agent_path" ]; then
-        echo "Removing old binary..."
+        log_info "Removing old binary..."
         rm -f "$komari_agent_path"
     fi
 }
@@ -38,7 +118,7 @@ uninstall_previous() {
 uninstall_previous
 
 install_dependencies() {
-    echo "Checking and installing dependencies..."
+    log_step "Checking and installing dependencies..."
 
     local deps="curl"
     local missing_deps=""
@@ -51,29 +131,30 @@ install_dependencies() {
     if [ -n "$missing_deps" ]; then
         # Check package manager and install dependencies
         if command -v apt >/dev/null 2>&1; then
-            echo "Using apt to install dependencies..."
+            log_info "Using apt to install dependencies..."
             apt update
             apt install -y $missing_deps
         elif command -v yum >/dev/null 2>&1; then
-            echo "Using yum to install dependencies..."
+            log_info "Using yum to install dependencies..."
             yum install -y $missing_deps
         elif command -v apk >/dev/null 2>&1; then
-            echo "Using apk to install dependencies..."
+            log_info "Using apk to install dependencies..."
             apk add $missing_deps
         else
-            echo "Error: No supported package manager found (apt/yum/apk)"
+            log_error "No supported package manager found (apt/yum/apk)"
             exit 1
         fi
         
         # Verify installation
         for cmd in $missing_deps; do
             if ! command -v $cmd >/dev/null 2>&1; then
-                echo "Error: Failed to install $cmd"
+                log_error "Failed to install $cmd"
                 exit 1
             fi
         done
+        log_success "Dependencies installed successfully"
     else
-        echo "Dependencies already satisfied"
+        log_success "Dependencies already satisfied"
     fi
 }
 
@@ -89,42 +170,59 @@ case $arch in
         arch="arm64"
         ;;
     *)
-        echo "Unsupported architecture: $arch"
+        log_error "Unsupported architecture: $arch"
         exit 1
         ;;
 esac
-echo "Detected architecture: $arch"
+log_info "Detected architecture: ${GREEN}$arch${NC}"
 
-# Get latest release version
-latest_version=$(curl -s https://api.github.com/repos/komari-monitor/komari-agent/releases/latest | grep "tag_name" | cut -d'"' -f4)
+# Get latest release version (API always uses direct access)
+api_url="https://api.github.com/repos/komari-monitor/komari-agent/releases/latest"
+
+log_step "Fetching latest version from GitHub API..."
+latest_version=$(curl -s "$api_url" | grep "tag_name" | cut -d'"' -f4)
 if [ -z "$latest_version" ]; then
-    echo "Error: Could not fetch latest version"
+    log_error "Could not fetch latest version"
     exit 1
 fi
-echo "Latest version: $latest_version"
+log_success "Latest version: ${GREEN}$latest_version${NC}"
 
 # Construct download URL
 file_name="komari-agent-linux-${arch}"
-download_url="https://github.com/komari-monitor/komari-agent/releases/download/${latest_version}/${file_name}"
+if [ -n "$github_proxy" ]; then
+    # Use proxy for GitHub releases
+    download_url="${github_proxy}/https://github.com/komari-monitor/komari-agent/releases/download/${latest_version}/${file_name}"
+else
+    # Direct access to GitHub releases
+    download_url="https://github.com/komari-monitor/komari-agent/releases/download/${latest_version}/${file_name}"
+fi
 
-
+log_step "Creating installation directory: ${GREEN}$target_dir${NC}"
 mkdir -p "$target_dir"
 
 # Download binary
-echo "Downloading $file_name..."
+if [ -n "$github_proxy" ]; then
+    log_step "Downloading $file_name via proxy..."
+    log_info "URL: ${CYAN}$download_url${NC}"
+else
+    log_step "Downloading $file_name directly..."
+    log_info "URL: ${CYAN}$download_url${NC}"
+fi
 curl -L -o "$komari_agent_path" "$download_url"
 if [ $? -ne 0 ]; then
-    echo "Download failed"
+    log_error "Download failed"
     exit 1
 fi
 
 # Set executable permissions
 chmod +x "$komari_agent_path"
-echo "Komari-agent installed to $komari_agent_path"
+log_success "Komari-agent installed to ${GREEN}$komari_agent_path${NC}"
 
 # Detect init system and configure service
+log_step "Configuring system service..."
 if command -v systemctl >/dev/null 2>&1; then
     # Systemd service configuration
+    log_info "Using systemd for service management"
     service_file="/etc/systemd/system/${service_name}.service"
     cat > "$service_file" << EOF
 [Unit]
@@ -146,8 +244,10 @@ EOF
     systemctl daemon-reload
     systemctl enable ${service_name}.service
     systemctl start ${service_name}.service
+    log_success "Systemd service configured and started"
 elif command -v rc-service >/dev/null 2>&1; then
     # OpenRC service configuration
+    log_info "Using OpenRC for service management"
     service_file="/etc/init.d/${service_name}"
     cat > "$service_file" << EOF
 #!/sbin/openrc-run
@@ -171,9 +271,15 @@ EOF
     chmod +x "$service_file"
     rc-update add ${service_name} default
     rc-service ${service_name} start
+    log_success "OpenRC service configured and started"
 else
-    echo "Error: Unsupported init system (neither systemd nor openrc found)"
+    log_error "Unsupported init system (neither systemd nor openrc found)"
     exit 1
 fi
 
-echo "Komari-agent service configured and started with arguments: ${komari_args}"
+echo ""
+echo -e "${WHITE}===========================================${NC}"
+log_success "Komari-agent installation completed!"
+log_config "Service: ${GREEN}$service_name${NC}"
+log_config "Arguments: ${GREEN}$komari_args${NC}"
+echo -e "${WHITE}===========================================${NC}"
