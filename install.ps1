@@ -31,14 +31,24 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
     exit 1
 }
 
+# Prepare GitHub proxy display
+if ($GitHubProxy -ne '') { $ProxyDisplay = $GitHubProxy } else { $ProxyDisplay = '(direct)' }
+
+# Detect architecture early for constructing binary name
+switch ($env:PROCESSOR_ARCHITECTURE) {
+    'AMD64' { $arch = 'amd64' }
+    'ARM64' { $arch = 'arm64' }
+    Default { Log-Error "Unsupported architecture: $env:PROCESSOR_ARCHITECTURE"; exit 1 }
+}
+
 Log-Step "Installation configuration:"
 Log-Config "Service name: $ServiceName"
 Log-Config "Install directory: $InstallDir"
-Log-Config "GitHub proxy: $($GitHubProxy -ne '' ? $GitHubProxy : '(direct)')"
+Log-Config "GitHub proxy: $ProxyDisplay"
 Log-Config "Agent arguments: $($KomariArgs -join ' ')"
 
 # Paths
-$BinaryName   = "komari-agent-windows-$((switch($env:PROCESSOR_ARCHITECTURE) { 'AMD64' { 'amd64' }; 'ARM64' { 'arm64' }; Default { '' } })) .exe".Trim()
+$BinaryName   = "komari-agent-windows-$arch.exe"
 $AgentPath    = Join-Path $InstallDir $BinaryName
 
 # Uninstall previous service and binary
@@ -57,14 +67,6 @@ function Uninstall-Previous {
     }
 }
 Uninstall-Previous
-
-# Detect architecture
-switch ($env:PROCESSOR_ARCHITECTURE) {
-    "AMD64" { $arch = "amd64" }
-    "ARM64" { $arch = "arm64" }
-    Default  { Log-Error "Unsupported architecture: $env:PROCESSOR_ARCHITECTURE"; exit 1 }
-}
-Log-Info "Detected architecture: $arch"
 
 # Fetch latest release version
 $ApiUrl = "https://api.github.com/repos/komari-monitor/komari-agent/releases/latest"
