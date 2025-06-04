@@ -99,7 +99,11 @@ func handleWebSocketMessages(conn *websocket.Conn, done chan<- struct{}) {
 		}
 		var message struct {
 			Message string `json:"message"`
-			ID      string `json:"request_id"`
+			// Terminal
+			TerminalId string `json:"request_id,omitempty"`
+			// Remote Exec
+			ExecCommand string `json:"command,omitempty"`
+			ExecTaskID  string `json:"task_id,omitempty"`
 		}
 		err = json.Unmarshal(message_raw, &message)
 		if err != nil {
@@ -107,8 +111,12 @@ func handleWebSocketMessages(conn *websocket.Conn, done chan<- struct{}) {
 			continue
 		}
 
-		if message.Message == "terminal" || message.ID != "" {
-			go establishTerminalConnection(flags.Token, message.ID, flags.Endpoint)
+		if message.Message == "terminal" || message.TerminalId != "" {
+			go establishTerminalConnection(flags.Token, message.TerminalId, flags.Endpoint)
+			continue
+		}
+		if message.Message == "exec" {
+			go NewTask(message.ExecTaskID, message.ExecCommand)
 			continue
 		}
 
