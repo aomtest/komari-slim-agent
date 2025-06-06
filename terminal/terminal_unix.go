@@ -52,8 +52,8 @@ func newTerminalImpl() (*terminalImpl, error) {
 	if shell == "" {
 		return nil, fmt.Errorf("no supported shell found")
 	}
-	// 创建进程
-	cmd := exec.Command(shell)
+	// 创建进程: 优先使用交互模式，如不支持则回退
+	cmd := exec.Command(shell, "-i")
 	cmd.Env = append(os.Environ(), // 继承系统环境变量
 		"TERM=xterm-256color",
 		"LANG=C.UTF-8",
@@ -61,7 +61,17 @@ func newTerminalImpl() (*terminalImpl, error) {
 	)
 	tty, err := pty.Start(cmd)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start pty: %v", err)
+		// 交互模式不被支持，回退到无 -i 的启动方式
+		cmd = exec.Command(shell)
+		cmd.Env = append(os.Environ(),
+			"TERM=xterm-256color",
+			"LANG=C.UTF-8",
+			"LC_ALL=C.UTF-8",
+		)
+		tty, err = pty.Start(cmd)
+		if err != nil {
+			return nil, fmt.Errorf("failed to start pty with or without -i: %v", err)
+		}
 	}
 
 	// 设置初始终端大小
