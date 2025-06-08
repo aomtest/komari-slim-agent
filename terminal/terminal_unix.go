@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/creack/pty"
 )
@@ -94,9 +95,28 @@ type unixTerminal struct {
 func (t *unixTerminal) Close() error {
 	pgid, err := syscall.Getpgid(t.cmd.Process.Pid)
 	if err != nil {
-		return t.cmd.Process.Kill()
+		pgid = t.cmd.Process.Pid
 	}
-	return syscall.Kill(-pgid, syscall.SIGKILL)
+	_ = syscall.Kill(-pgid, syscall.SIGTERM)
+	done := make(chan error, 1)
+	go func() {
+		done <- t.cmd.Wait()
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+		} else {
+			if exitErr, ok := err.(*exec.ExitError); ok && exitErr.Exited() {
+				return nil
+			}
+			return fmt.Errorf("process group did not exit gracefully: %v", err)
+		}
+		return err
+	case <-time.After(5 * time.Second):
+	}
+	// 超时未退出，强制 SIGKILL
+	_ = syscall.Kill(-pgid, syscall.SIGKILL)
+	return <-done
 }
 
 func (t *unixTerminal) Read(p []byte) (int, error) {

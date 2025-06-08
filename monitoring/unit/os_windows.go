@@ -21,6 +21,10 @@ func OSName() string {
 	if err != nil {
 		return "Microsoft Windows"
 	}
+	// 如果是 Server 版本，直接返回原始名称
+	if strings.Contains(productName, "Server") {
+		return productName
+	}
 
 	// Windows 11
 	majorVersion, _, err := key.GetIntegerValue("CurrentMajorVersionNumber")

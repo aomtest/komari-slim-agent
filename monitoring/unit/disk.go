@@ -36,6 +36,10 @@ func Disk() DiskInfo {
 
 // isPhysicalDisk 判断分区是否为物理磁盘
 func isPhysicalDisk(part disk.PartitionStat) bool {
+	// 对于LXC等基于loop的根文件系统，始终包含根挂载点
+	if part.Mountpoint == "/" {
+		return true
+	}
 	mountpoint := strings.ToLower(part.Mountpoint)
 	// 临时文件系统
 	if mountpoint == "/tmp" || mountpoint == "/var/tmp" || mountpoint == "/dev/shm" ||
