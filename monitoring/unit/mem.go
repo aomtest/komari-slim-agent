@@ -1,6 +1,7 @@
 package monitoring
 
 import (
+	"github.com/komari-monitor/komari-agent/cmd/flags"
 	"github.com/shirou/gopsutil/mem"
 )
 
@@ -15,10 +16,16 @@ func Ram() RamInfo {
 	if err != nil {
 		raminfo.Total = 0
 		raminfo.Used = 0
-	} else {
-		raminfo.Total = v.Total
-		raminfo.Used = v.Used
+		return raminfo
 	}
+	if flags.MemoryModeAvailable {
+		raminfo.Total = v.Total
+		raminfo.Used = v.Total - v.Available
+		return raminfo
+	}
+	raminfo.Total = v.Total
+	raminfo.Used = v.Used
+
 	return raminfo
 }
 func Swap() RamInfo {
