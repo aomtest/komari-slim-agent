@@ -37,18 +37,18 @@ func (sc *SafeConn) Close() error {
 	return sc.conn.Close()
 }
 func (sc *SafeConn) ReadMessage() (int, []byte, error) {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
+	// sc.mu.Lock()
+	// defer sc.mu.Unlock()
 	return sc.conn.ReadMessage()
 }
 func (sc *SafeConn) ReadJSON(v interface{}) error {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
+	// sc.mu.Lock()
+	// defer sc.mu.Unlock()
 	return sc.conn.ReadJSON(v)
 }
 func (sc *SafeConn) SetReadDeadline(t time.Time) error {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
+	// sc.mu.Lock()
+	// defer sc.mu.Unlock()
 	return sc.conn.SetReadDeadline(t)
 }
 func (sc *SafeConn) GetConn() *websocket.Conn {

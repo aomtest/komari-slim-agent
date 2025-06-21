@@ -34,6 +34,7 @@ var RootCmd = &cobra.Command{
 		}
 		go server.DoUploadBasicInfoWorks()
 		for {
+			server.UpdateBasicInfo()
 			server.EstablishWebSocketConnection()
 		}
 	},

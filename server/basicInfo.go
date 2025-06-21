@@ -15,10 +15,6 @@ import (
 )
 
 func DoUploadBasicInfoWorks() {
-	err := uploadBasicInfo()
-	if err != nil {
-		log.Println("Error uploading basic info:", err)
-	}
 	ticker := time.NewTicker(time.Duration(15) * time.Minute)
 	for range ticker.C {
 		err := uploadBasicInfo()
@@ -27,7 +23,14 @@ func DoUploadBasicInfoWorks() {
 		}
 	}
 }
-
+func UpdateBasicInfo() {
+	err := uploadBasicInfo()
+	if err != nil {
+		log.Println("Error uploading basic info:", err)
+	} else {
+		log.Println("Basic info uploaded successfully")
+	}
+}
 func uploadBasicInfo() error {
 	cpu := monitoring.Cpu()
 
