@@ -3,14 +3,18 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os/exec"
 	"runtime"
 	"strings"
 	"time"
 
+	ping "github.com/go-ping/ping"
 	"github.com/komari-monitor/komari-agent/cmd/flags"
+	"github.com/komari-monitor/komari-agent/ws"
 )
 
 func NewTask(task_id, command string) {
@@ -78,4 +82,80 @@ func uploadTaskResult(taskID, result string, exitCode int, finishedAt time.Time)
 			log.Printf("Failed to upload task result: %s", resp.Status)
 		}
 	}
+}
+func icmpPing(target string, timeout time.Duration) error {
+	pinger, err := getPinger(target)
+	if err != nil {
+		return err
+	}
+	pinger.Count = 1
+	pinger.Timeout = timeout
+	pinger.SetPrivileged(true)
+	return pinger.Run()
+}
+
+func getPinger(target string) (*ping.Pinger, error) {
+	return ping.NewPinger(target)
+}
+
+func tcpPing(target string, timeout time.Duration) error {
+	if !strings.Contains(target, ":") {
+		target += ":80"
+	}
+	conn, err := net.DialTimeout("tcp", target, timeout)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	return nil
+}
+
+func httpPing(target string, timeout time.Duration) (int64, error) {
+	client := http.Client{
+		Timeout: timeout,
+	}
+	start := time.Now()
+	resp, err := client.Get(target)
+	latency := time.Since(start).Milliseconds()
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+		return latency, nil
+	}
+	return latency, errors.New("http status not ok")
+}
+
+func NewPingTask(conn *ws.SafeConn, taskID uint, pingType, pingTarget string) {
+	if taskID == 0 {
+		return
+	}
+	pingResult := 0
+	timeout := 3 * time.Second
+	switch pingType {
+	case "icmp":
+		start := time.Now()
+		if err := icmpPing(pingTarget, timeout); err == nil {
+			pingResult = int(time.Since(start).Milliseconds())
+		}
+	case "tcp":
+		start := time.Now()
+		if err := tcpPing(pingTarget, timeout); err == nil {
+			pingResult = int(time.Since(start).Milliseconds())
+		}
+	case "http":
+		if latency, err := httpPing(pingTarget, timeout); err == nil {
+			pingResult = int(latency)
+		}
+	default:
+		return
+	}
+	payload := map[string]interface{}{
+		"type":        "ping_result",
+		"task_id":     taskID,
+		"value":       pingResult,
+		"finished_at": time.Now(),
+	}
+	_ = conn.WriteJSON(payload)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/komari-monitor/komari-agent/cmd/flags"
 	"github.com/komari-monitor/komari-agent/monitoring"
 	"github.com/komari-monitor/komari-agent/terminal"
+	"github.com/komari-monitor/komari-agent/ws"
 )
 
 func EstablishWebSocketConnection() {
@@ -18,7 +19,7 @@ func EstablishWebSocketConnection() {
 	websocketEndpoint := strings.TrimSuffix(flags.Endpoint, "/") + "/api/clients/report?token=" + flags.Token
 	websocketEndpoint = "ws" + strings.TrimPrefix(websocketEndpoint, "http")
 
-	var conn *websocket.Conn
+	var conn *ws.SafeConn
 	defer func() {
 		if conn != nil {
 			conn.Close()
@@ -73,7 +74,7 @@ func EstablishWebSocketConnection() {
 	}
 }
 
-func connectWebSocket(websocketEndpoint string) (*websocket.Conn, error) {
+func connectWebSocket(websocketEndpoint string) (*ws.SafeConn, error) {
 	dialer := &websocket.Dialer{
 		HandshakeTimeout: 5 * time.Second,
 	}
@@ -85,11 +86,10 @@ func connectWebSocket(websocketEndpoint string) (*websocket.Conn, error) {
 		return nil, err
 	}
 
-	return conn, nil
+	return ws.NewSafeConn(conn), nil
 }
 
-func handleWebSocketMessages(conn *websocket.Conn, done chan<- struct{}) {
-
+func handleWebSocketMessages(conn *ws.SafeConn, done chan<- struct{}) {
 	defer close(done)
 	for {
 		_, message_raw, err := conn.ReadMessage()
@@ -104,6 +104,10 @@ func handleWebSocketMessages(conn *websocket.Conn, done chan<- struct{}) {
 			// Remote Exec
 			ExecCommand string `json:"command,omitempty"`
 			ExecTaskID  string `json:"task_id,omitempty"`
+			// Ping
+			PingTaskID uint   `json:"ping_task_id,omitempty"`
+			PingType   string `json:"ping_type,omitempty"`
+			PingTarget string `json:"ping_target,omitempty"`
 		}
 		err = json.Unmarshal(message_raw, &message)
 		if err != nil {
@@ -119,7 +123,10 @@ func handleWebSocketMessages(conn *websocket.Conn, done chan<- struct{}) {
 			go NewTask(message.ExecTaskID, message.ExecCommand)
 			continue
 		}
-
+		if message.Message == "ping" || message.PingTaskID != 0 || message.PingType != "" || message.PingTarget != "" {
+			go NewPingTask(conn, message.PingTaskID, message.PingType, message.PingTarget)
+			continue
+		}
 	}
 }
 
