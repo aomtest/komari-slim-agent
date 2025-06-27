@@ -13,6 +13,7 @@ $InstallDir = Join-Path $Env:ProgramFiles "Komari"
 $ServiceName = "komari-agent"
 $GitHubProxy = ""
 $KomariArgs = @()
+$InstallVersion = ""
 
 # Parse script arguments
 for ($i = 0; $i -lt $args.Count; $i++) {
@@ -20,6 +21,7 @@ for ($i = 0; $i -lt $args.Count; $i++) {
         "--install-dir" { $InstallDir = $args[$i + 1]; $i++; continue }
         "--install-service-name" { $ServiceName = $args[$i + 1]; $i++; continue }
         "--install-ghproxy" { $GitHubProxy = $args[$i + 1]; $i++; continue }
+        "--install-version" { $InstallVersion = $args[$i + 1]; $i++; continue }
         Default { $KomariArgs += $args[$i] }
     }
 }
@@ -158,6 +160,11 @@ Log-Config "Service name: $ServiceName"
 Log-Config "Install directory: $InstallDir"
 Log-Config "GitHub proxy: $ProxyDisplay"
 Log-Config "Agent arguments: $($KomariArgs -join ' ')"
+if ($InstallVersion -ne "") {
+    Log-Config "Specified agent version: $InstallVersion"
+} else {
+    Log-Config "Agent version: Latest"
+}
 
 # Paths
 $BinaryName = "komari-agent-windows-$arch.exe"
@@ -198,21 +205,29 @@ function Uninstall-Previous {
 }
 Uninstall-Previous
 
-# Fetch latest release version
-$ApiUrl = "https://api.github.com/repos/komari-monitor/komari-agent/releases/latest"
-try {
-    $release = Invoke-RestMethod -Uri $ApiUrl -UseBasicParsing
-    $latestVersion = $release.tag_name
+$versionToInstall = ""
+if ($InstallVersion -ne "") {
+    Log-Info "Attempting to install specified version: $InstallVersion"
+    $versionToInstall = $InstallVersion
 }
-catch {
-    Log-Error "Failed to fetch latest version: $_"
-    exit 1
+else {
+    $ApiUrl = "https://api.github.com/repos/komari-monitor/komari-agent/releases/latest"
+    try {
+        Log-Step "Fetching latest release version from GitHub API..."
+        $release = Invoke-RestMethod -Uri $ApiUrl -UseBasicParsing
+        $versionToInstall = $release.tag_name
+        Log-Success "Latest version fetched: $versionToInstall"
+    }
+    catch {
+        Log-Error "Failed to fetch latest version: $_"
+        exit 1
+    }
 }
-Log-Success "Latest version: $latestVersion"
+Log-Success "Installing Komari Agent version: $versionToInstall"
 
 # Construct download URL
 $BinaryName = "komari-agent-windows-$arch.exe"
-$DownloadUrl = if ($GitHubProxy) { "$GitHubProxy/https://github.com/komari-monitor/komari-agent/releases/download/$latestVersion/$BinaryName" } else { "https://github.com/komari-monitor/komari-agent/releases/download/$latestVersion/$BinaryName" }
+$DownloadUrl = if ($GitHubProxy) { "$GitHubProxy/https://github.com/komari-monitor/komari-agent/releases/download/$versionToInstall/$BinaryName" } else { "https://github.com/komari-monitor/komari-agent/releases/download/$versionToInstall/$BinaryName" }
 
 # Download and install
 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null

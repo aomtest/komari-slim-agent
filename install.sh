@@ -39,6 +39,7 @@ log_config() {
 service_name="komari-agent"
 target_dir="/opt/komari"
 github_proxy=""
+install_version="" # New parameter for specifying version
 
 # Parse install-specific arguments
 komari_args=""
@@ -54,6 +55,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --install-ghproxy)
             github_proxy="$2"
+            shift 2
+            ;;
+        --install-version)
+            install_version="$2"
             shift 2
             ;;
         --install*)
@@ -87,6 +92,11 @@ log_config "  Service name: ${GREEN}$service_name${NC}"
 log_config "  Install directory: ${GREEN}$target_dir${NC}"
 log_config "  GitHub proxy: ${GREEN}${github_proxy:-"(direct)"}${NC}"
 log_config "  Binary arguments: ${GREEN}$komari_args${NC}"
+if [ -n "$install_version" ]; then
+    log_config "  Specified agent version: ${GREEN}$install_version${NC}"
+else
+    log_config "  Agent version: ${GREEN}Latest${NC}"
+fi
 echo ""
 
 # Function to uninstall the previous installation
@@ -176,25 +186,30 @@ case $arch in
 esac
 log_info "Detected architecture: ${GREEN}$arch${NC}"
 
-# Get latest release version (API always uses direct access)
-api_url="https://api.github.com/repos/komari-monitor/komari-agent/releases/latest"
-
-log_step "Fetching latest version from GitHub API..."
-latest_version=$(curl -s "$api_url" | grep "tag_name" | cut -d'"' -f4)
-if [ -z "$latest_version" ]; then
-    log_error "Could not fetch latest version"
-    exit 1
+current_version=""
+if [ -n "$install_version" ]; then
+    log_info "Attempting to install specified version: ${GREEN}$install_version${NC}"
+    current_version="$install_version"
+else
+    api_url="https://api.github.com/repos/komari-monitor/komari-agent/releases/latest"
+    log_step "Fetching latest version from GitHub API..."
+    current_version=$(curl -s "$api_url" | grep "tag_name" | cut -d'"' -f4)
+    if [ -z "$current_version" ]; then
+        log_error "Could not fetch latest version"
+        exit 1
+    fi
+    log_success "Latest version fetched: ${GREEN}$current_version${NC}"
 fi
-log_success "Latest version: ${GREEN}$latest_version${NC}"
+log_success "Installing Komari Agent version: ${GREEN}$current_version${NC}"
 
 # Construct download URL
 file_name="komari-agent-linux-${arch}"
 if [ -n "$github_proxy" ]; then
     # Use proxy for GitHub releases
-    download_url="${github_proxy}/https://github.com/komari-monitor/komari-agent/releases/download/${latest_version}/${file_name}"
+    download_url="${github_proxy}/https://github.com/komari-monitor/komari-agent/releases/download/${current_version}/${file_name}"
 else
     # Direct access to GitHub releases
-    download_url="https://github.com/komari-monitor/komari-agent/releases/download/${latest_version}/${file_name}"
+    download_url="https://github.com/komari-monitor/komari-agent/releases/download/${current_version}/${file_name}"
 fi
 
 log_step "Creating installation directory: ${GREEN}$target_dir${NC}"
