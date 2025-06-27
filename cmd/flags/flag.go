@@ -10,4 +10,5 @@ var (
 	IgnoreUnsafeCert    bool
 	MaxRetries          int
 	ReconnectInterval   int
+	InfoReportInterval  int
 )

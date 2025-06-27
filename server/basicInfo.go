@@ -15,7 +15,7 @@ import (
 )
 
 func DoUploadBasicInfoWorks() {
-	ticker := time.NewTicker(time.Duration(15) * time.Minute)
+	ticker := time.NewTicker(time.Duration(flags.InfoReportInterval) * time.Minute)
 	for range ticker.C {
 		err := uploadBasicInfo()
 		if err != nil {
