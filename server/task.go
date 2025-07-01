@@ -88,7 +88,7 @@ func uploadTaskResult(taskID, result string, exitCode int, finishedAt time.Time)
 // resolveIP 解析域名到 IP 地址，排除 DNS 查询时间
 func resolveIP(target string) (string, error) {
 	// 如果已经是 IP 地址，直接返回
-	if net.ParseIP(target) != nil {
+	if ip := net.ParseIP(target); ip != nil {
 		return target, nil
 	}
 	// 解析域名到 IP
@@ -100,8 +100,16 @@ func resolveIP(target string) (string, error) {
 }
 
 func icmpPing(target string, timeout time.Duration) (int64, error) {
+	host, _, err := net.SplitHostPort(target)
+	if err != nil {
+		host = target
+	}
+	// For ICMP, we only need the host/IP, port is irrelevant.
+	// If the host is an IPv6 literal, it might be wrapped in brackets.
+	host = strings.Trim(host, "[]")
+
 	// 先解析 IP 地址
-	ip, err := resolveIP(target)
+	ip, err := resolveIP(host)
 	if err != nil {
 		return -1, err
 	}
@@ -125,17 +133,19 @@ func icmpPing(target string, timeout time.Duration) (int64, error) {
 }
 
 func tcpPing(target string, timeout time.Duration) (int64, error) {
-	addr := strings.Split(target, ":")
-	ip, err := resolveIP(addr[0])
+	host, port, err := net.SplitHostPort(target)
+	if err != nil {
+		// No port, assume port 80
+		host = target
+		port = "80"
+	}
+
+	ip, err := resolveIP(host)
 	if err != nil {
 		return -1, err
 	}
 
-	port := "80"
-	if len(addr) > 1 {
-		port = addr[1]
-	}
-	targetAddr := ip + ":" + port
+	targetAddr := net.JoinHostPort(ip, port)
 	start := time.Now()
 	conn, err := net.DialTimeout("tcp", targetAddr, timeout)
 	if err != nil {
@@ -146,6 +156,14 @@ func tcpPing(target string, timeout time.Duration) (int64, error) {
 }
 
 func httpPing(target string, timeout time.Duration) (int64, error) {
+	// Handle raw IPv6 address for URL
+	if strings.Contains(target, ":") && !strings.Contains(target, "[") {
+		// check if it's a valid IP to avoid wrapping hostnames
+		if ip := net.ParseIP(target); ip != nil && ip.To4() == nil {
+			target = "[" + target + "]"
+		}
+	}
+
 	if !strings.HasPrefix(target, "http://") && !strings.HasPrefix(target, "https://") {
 		target = "http://" + target
 	}
@@ -163,7 +181,7 @@ func httpPing(target string, timeout time.Duration) (int64, error) {
 				if err != nil {
 					return nil, err
 				}
-				return net.DialTimeout(network, ip+":"+port, timeout)
+				return net.DialTimeout(network, net.JoinHostPort(ip, port), timeout)
 			},
 		},
 	}
