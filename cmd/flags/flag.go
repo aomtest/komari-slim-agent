@@ -11,4 +11,6 @@ var (
 	MaxRetries          int
 	ReconnectInterval   int
 	InfoReportInterval  int
+	IncludeNics         string
+	ExcludeNics         string
 )
