@@ -12,11 +12,11 @@ NC='\033[0m' # No Color
 
 # Logging functions
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    echo -e "${NC} $1"
 }
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}${NC} $1"
 }
 
 log_warning() {
@@ -28,7 +28,7 @@ log_error() {
 }
 
 log_step() {
-    echo -e "${PURPLE}[STEP]${NC} $1"
+    echo -e "${NC} $1"
 }
 
 log_config() {
@@ -115,6 +115,11 @@ uninstall_previous() {
         rc-service ${service_name} stop
         rc-update del ${service_name} default
         rm -f "/etc/init.d/${service_name}"
+    elif command -v uci >/dev/null 2>&1 && [ -f "/etc/init.d/${service_name}" ]; then
+        log_info "Stopping and disabling existing procd service..."
+        /etc/init.d/${service_name} stop
+        /etc/init.d/${service_name} disable
+        rm -f "/etc/init.d/${service_name}"
     fi
     
     # Remove old binary if it exists
@@ -186,30 +191,28 @@ case $arch in
 esac
 log_info "Detected architecture: ${GREEN}$arch${NC}"
 
-current_version=""
+version_to_install="latest"
 if [ -n "$install_version" ]; then
     log_info "Attempting to install specified version: ${GREEN}$install_version${NC}"
-    current_version="$install_version"
+    version_to_install="$install_version"
 else
-    api_url="https://api.github.com/repos/komari-monitor/komari-agent/releases/latest"
-    log_step "Fetching latest version from GitHub API..."
-    current_version=$(curl -s "$api_url" | grep "tag_name" | cut -d'"' -f4)
-    if [ -z "$current_version" ]; then
-        log_error "Could not fetch latest version"
-        exit 1
-    fi
-    log_success "Latest version fetched: ${GREEN}$current_version${NC}"
+    log_info "No version specified, installing the latest version."
 fi
-log_success "Installing Komari Agent version: ${GREEN}$current_version${NC}"
 
 # Construct download URL
 file_name="komari-agent-linux-${arch}"
+if [ "$version_to_install" = "latest" ]; then
+    download_path="latest/download"
+else
+    download_path="download/${version_to_install}"
+fi
+
 if [ -n "$github_proxy" ]; then
     # Use proxy for GitHub releases
-    download_url="${github_proxy}/https://github.com/komari-monitor/komari-agent/releases/download/${current_version}/${file_name}"
+    download_url="${github_proxy}/https://github.com/komari-monitor/komari-agent/releases/${download_path}/${file_name}"
 else
     # Direct access to GitHub releases
-    download_url="https://github.com/komari-monitor/komari-agent/releases/download/${current_version}/${file_name}"
+    download_url="https://github.com/komari-monitor/komari-agent/releases/${download_path}/${file_name}"
 fi
 
 log_step "Creating installation directory: ${GREEN}$target_dir${NC}"
@@ -287,8 +290,48 @@ EOF
     rc-update add ${service_name} default
     rc-service ${service_name} start
     log_success "OpenRC service configured and started"
+elif command -v uci >/dev/null 2>&1; then
+    # procd service configuration (OpenWrt)
+    log_info "Using procd for service management"
+    service_file="/etc/init.d/${service_name}"
+    cat > "$service_file" << EOF
+#!/bin/sh /etc/rc.common
+
+START=99
+STOP=10
+
+USE_PROCD=1
+
+PROG="${komari_agent_path}"
+ARGS="${komari_args}"
+
+start_service() {
+    procd_open_instance
+    procd_set_param command \$PROG \$ARGS
+    procd_set_param respawn
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_set_param user root
+    procd_close_instance
+}
+
+stop_service() {
+    killall \$(basename \$PROG)
+}
+
+reload_service() {
+    stop
+    start
+}
+EOF
+
+    # Set permissions and enable service
+    chmod +x "$service_file"
+    /etc/init.d/${service_name} enable
+    /etc/init.d/${service_name} start
+    log_success "procd service configured and started"
 else
-    log_error "Unsupported init system (neither systemd nor openrc found)"
+    log_error "Unsupported init system (systemd, openrc, or procd not found)"
     exit 1
 fi
 

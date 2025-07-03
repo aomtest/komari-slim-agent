@@ -6,6 +6,7 @@ require (
 	github.com/UserExistsError/conpty v0.1.4
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/creack/pty v1.1.24
+	github.com/go-ping/ping v1.2.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/rhysd/go-github-selfupdate v1.2.3
 	github.com/shirou/gopsutil v3.21.11+incompatible
@@ -15,8 +16,6 @@ require (
 
 require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
-	github.com/go-ping/ping v1.2.0 // indirect
-	github.com/golang/protobuf v1.3.2 // indirect
 	github.com/google/go-github/v30 v30.1.0 // indirect
 	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/google/uuid v1.2.0 // indirect
@@ -33,5 +32,4 @@ require (
 	golang.org/x/net v0.21.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
-	google.golang.org/appengine v1.3.0 // indirect
 )
