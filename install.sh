@@ -238,7 +238,28 @@ log_success "Komari-agent installed to ${GREEN}$komari_agent_path${NC}"
 
 # Detect init system and configure service
 log_step "Configuring system service..."
-if command -v systemctl >/dev/null 2>&1; then
+
+# Check if running on NixOS
+if [ -f /etc/NIXOS ]; then
+    log_warning "NixOS detected. System services must be configured declaratively."
+    log_info "Please add the following to your NixOS configuration:"
+    echo ""
+    echo -e "${CYAN}systemd.services.${service_name} = {${NC}"
+    echo -e "${CYAN}  description = \"Komari Agent Service\";${NC}"
+    echo -e "${CYAN}  after = [ \"network.target\" ];${NC}"
+    echo -e "${CYAN}  wantedBy = [ \"multi-user.target\" ];${NC}"
+    echo -e "${CYAN}  serviceConfig = {${NC}"
+    echo -e "${CYAN}    Type = \"simple\";${NC}"
+    echo -e "${CYAN}    ExecStart = \"${komari_agent_path} ${komari_args}\";${NC}"
+    echo -e "${CYAN}    WorkingDirectory = \"${target_dir}\";${NC}"
+    echo -e "${CYAN}    Restart = \"always\";${NC}"
+    echo -e "${CYAN}    User = \"root\";${NC}"
+    echo -e "${CYAN}  };${NC}"
+    echo -e "${CYAN}};${NC}"
+    echo ""
+    log_info "Then run: sudo nixos-rebuild switch"
+    log_warning "Service not started automatically on NixOS. Please rebuild your configuration."
+elif command -v systemctl >/dev/null 2>&1; then
     # Systemd service configuration
     log_info "Using systemd for service management"
     service_file="/etc/systemd/system/${service_name}.service"
@@ -337,7 +358,13 @@ fi
 
 echo ""
 echo -e "${WHITE}===========================================${NC}"
-log_success "Komari-agent installation completed!"
+if [ -f /etc/NIXOS ]; then
+    log_success "Komari-agent binary installed!"
+    log_warning "NixOS requires declarative service configuration."
+    log_info "Please add the service configuration to your NixOS config and rebuild."
+else
+    log_success "Komari-agent installation completed!"
+fi
 log_config "Service: ${GREEN}$service_name${NC}"
 log_config "Arguments: ${GREEN}$komari_args${NC}"
 echo -e "${WHITE}===========================================${NC}"
