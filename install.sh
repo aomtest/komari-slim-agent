@@ -299,6 +299,7 @@ command_user="root"
 directory="${target_dir}"
 pidfile="/run/${service_name}.pid"
 retry="SIGTERM/30"
+supervisor=supervise-daemon
 
 depend() {
     need net
