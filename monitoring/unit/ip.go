@@ -9,7 +9,7 @@ import (
 var userAgent = "curl/8.0.1"
 
 func GetIPv4Address() (string, error) {
-	webAPIs := []string{"https://api.bilibili.com/x/web-interface/zone", "https://ip.sb", "https://api.ipify.org?format=json"}
+	webAPIs := []string{"https://www.qualcomm.cn/cdn-cgi/trace", "https://ip.sb", "https://api.ipify.org?format=json"}
 
 	for _, api := range webAPIs {
 		// get ipv4
