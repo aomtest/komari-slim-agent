@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/komari-monitor/komari-agent/cmd/flags"
-	"github.com/shirou/gopsutil/net"
+	"github.com/shirou/gopsutil/v4/net"
 )
 
 func ConnectionsCount() (tcpCount, udpCount int, err error) {

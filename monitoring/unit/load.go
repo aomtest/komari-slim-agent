@@ -1,7 +1,7 @@
 package monitoring
 
 import (
-	"github.com/shirou/gopsutil/load"
+	"github.com/shirou/gopsutil/v4/load"
 )
 
 type LoadInfo struct {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/v4/cpu"
 )
 
 type CpuInfo struct {

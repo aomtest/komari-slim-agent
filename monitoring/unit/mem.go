@@ -2,7 +2,7 @@ package monitoring
 
 import (
 	"github.com/komari-monitor/komari-agent/cmd/flags"
-	"github.com/shirou/gopsutil/mem"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 type RamInfo struct {

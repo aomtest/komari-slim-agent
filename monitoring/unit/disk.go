@@ -3,7 +3,7 @@ package monitoring
 import (
 	"strings"
 
-	"github.com/shirou/gopsutil/disk"
+	"github.com/shirou/gopsutil/v4/disk"
 )
 
 type DiskInfo struct {
@@ -53,10 +53,9 @@ func isPhysicalDisk(part disk.PartitionStat) bool {
 		strings.HasPrefix(fstype, "smb") || fstype == "vboxsf" || fstype == "9p" ||
 		strings.Contains(fstype, "fuse") {
 		return false
-	}
-	// Windows 网络驱动器通常是映射盘符，但不容易通过fstype判断
+	} // Windows 网络驱动器通常是映射盘符，但不容易通过fstype判断
 	// 可以通过opts判断，Windows网络驱动通常有相关选项
-	optsStr := strings.ToLower(part.Opts)
+	optsStr := strings.ToLower(strings.Join(part.Opts, ","))
 	if strings.Contains(optsStr, "remote") || strings.Contains(optsStr, "network") {
 		return false
 	}
