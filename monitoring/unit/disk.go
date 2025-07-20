@@ -3,6 +3,7 @@ package monitoring
 import (
 	"strings"
 
+	"github.com/komari-monitor/komari-agent/cmd/flags"
 	"github.com/shirou/gopsutil/v4/disk"
 )
 
@@ -18,15 +19,32 @@ func Disk() DiskInfo {
 		diskinfo.Total = 0
 		diskinfo.Used = 0
 	} else {
-		for _, part := range usage {
-			// 排除临时文件系统和网络驱动器
-			if isPhysicalDisk(part) {
-				u, err := disk.Usage(part.Mountpoint)
-				if err != nil {
-					continue
-				} else {
-					diskinfo.Total += u.Total
-					diskinfo.Used += u.Used
+		// 如果指定了自定义挂载点，只统计指定的挂载点
+		if flags.IncludeMountpoints != "" {
+			includeMounts := strings.Split(flags.IncludeMountpoints, ";")
+			for _, mountpoint := range includeMounts {
+				mountpoint = strings.TrimSpace(mountpoint)
+				if mountpoint != "" {
+					u, err := disk.Usage(mountpoint)
+					if err != nil {
+						continue
+					} else {
+						diskinfo.Total += u.Total
+						diskinfo.Used += u.Used
+					}
+				}
+			}
+		} else {
+			// 使用默认逻辑，排除临时文件系统和网络驱动器
+			for _, part := range usage {
+				if isPhysicalDisk(part) {
+					u, err := disk.Usage(part.Mountpoint)
+					if err != nil {
+						continue
+					} else {
+						diskinfo.Total += u.Total
+						diskinfo.Used += u.Used
+					}
 				}
 			}
 		}

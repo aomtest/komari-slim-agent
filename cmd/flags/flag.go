@@ -13,5 +13,6 @@ var (
 	InfoReportInterval  int
 	IncludeNics         string
 	ExcludeNics         string
+	IncludeMountpoints  string
 	MonthRotate         int
 )
