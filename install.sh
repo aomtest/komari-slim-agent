@@ -41,6 +41,27 @@ target_dir="/opt/komari"
 github_proxy=""
 install_version="" # New parameter for specifying version
 
+# Detect OS
+os_type=$(uname -s)
+case $os_type in
+    Darwin)
+        os_name="darwin"
+        target_dir="/usr/local/komari"  # Use /usr/local on macOS
+        # Check if we can write to /usr/local, fallback to user directory
+        if [ ! -w "/usr/local" ] && [ "$EUID" -ne 0 ]; then
+            target_dir="$HOME/.komari"
+            log_info "No write permission to /usr/local, using user directory: $target_dir"
+        fi
+        ;;
+    Linux)
+        os_name="linux"
+        ;;
+    *)
+        log_error "Unsupported operating system: $os_type"
+        exit 1
+        ;;
+esac
+
 # Parse install-specific arguments
 komari_args=""
 while [[ $# -gt 0 ]]; do
@@ -78,7 +99,15 @@ komari_args="${komari_args# }"
 
 komari_agent_path="${target_dir}/agent"
 
-if [ "$EUID" -ne 0 ]; then
+# macOS doesn't always require sudo for everything
+if [ "$os_name" = "darwin" ] && command -v brew >/dev/null 2>&1; then
+    # On macOS with Homebrew, we can run without root for dependencies
+    require_root_for_deps=false
+else
+    require_root_for_deps=true
+fi
+
+if [ "$EUID" -ne 0 ] && [ "$require_root_for_deps" = true ]; then
     log_error "Please run as root"
     exit 1
 fi
@@ -120,6 +149,22 @@ uninstall_previous() {
         /etc/init.d/${service_name} stop
         /etc/init.d/${service_name} disable
         rm -f "/etc/init.d/${service_name}"
+    elif [ "$os_name" = "darwin" ] && command -v launchctl >/dev/null 2>&1; then
+        # macOS launchd service - check both system and user locations
+        system_plist="/Library/LaunchDaemons/com.komari.${service_name}.plist"
+        user_plist="$HOME/Library/LaunchAgents/com.komari.${service_name}.plist"
+        
+        if [ -f "$system_plist" ]; then
+            log_info "Stopping and removing existing system launchd service..."
+            launchctl bootout system "$system_plist" 2>/dev/null || true
+            rm -f "$system_plist"
+        fi
+        
+        if [ -f "$user_plist" ]; then
+            log_info "Stopping and removing existing user launchd service..."
+            launchctl bootout gui/$(id -u) "$user_plist" 2>/dev/null || true
+            rm -f "$user_plist"
+        fi
     fi
     
     # Remove old binary if it exists
@@ -155,8 +200,11 @@ install_dependencies() {
         elif command -v apk >/dev/null 2>&1; then
             log_info "Using apk to install dependencies..."
             apk add $missing_deps
+        elif command -v brew >/dev/null 2>&1; then
+            log_info "Using Homebrew to install dependencies..."
+            brew install $missing_deps
         else
-            log_error "No supported package manager found (apt/yum/apk)"
+            log_error "No supported package manager found (apt/yum/apk/brew)"
             exit 1
         fi
         
@@ -184,6 +232,9 @@ case $arch in
     aarch64)
         arch="arm64"
         ;;
+    arm64)
+        arch="arm64"
+        ;;
     *)
         log_error "Unsupported architecture: $arch"
         exit 1
@@ -200,7 +251,7 @@ else
 fi
 
 # Construct download URL
-file_name="komari-agent-linux-${arch}"
+file_name="komari-agent-${os_name}-${arch}"
 if [ "$version_to_install" = "latest" ]; then
     download_path="latest/download"
 else
@@ -226,8 +277,7 @@ else
     log_step "Downloading $file_name directly..."
     log_info "URL: ${CYAN}$download_url${NC}"
 fi
-curl -L -o "$komari_agent_path" "$download_url"
-if [ $? -ne 0 ]; then
+if ! curl -L -o "$komari_agent_path" "$download_url"; then
     log_error "Download failed"
     exit 1
 fi
@@ -352,8 +402,86 @@ EOF
     /etc/init.d/${service_name} enable
     /etc/init.d/${service_name} start
     log_success "procd service configured and started"
+elif [ "$os_name" = "darwin" ] && command -v launchctl >/dev/null 2>&1; then
+    # macOS launchd service configuration
+    log_info "Using launchd for service management"
+    
+    # Determine if this should be a system or user service based on installation directory
+    if [[ "$target_dir" =~ ^/Users/.* ]] || [ "$EUID" -ne 0 ]; then
+        # User-level service (LaunchAgent)
+        plist_dir="$HOME/Library/LaunchAgents"
+        plist_file="$plist_dir/com.komari.${service_name}.plist"
+        log_info "Installing as user-level service (LaunchAgent)"
+        mkdir -p "$plist_dir"
+        service_user="$(whoami)"
+        log_dir="$HOME/Library/Logs"
+    else
+        # System-level service (LaunchDaemon)
+        plist_dir="/Library/LaunchDaemons"
+        plist_file="$plist_dir/com.komari.${service_name}.plist"
+        log_info "Installing as system-level service (LaunchDaemon)"
+        service_user="root"
+        log_dir="/var/log"
+    fi
+    
+    # Create the launchd plist file
+    cat > "$plist_file" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.komari.${service_name}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${komari_agent_path}</string>
+EOF
+    
+    # Add program arguments if provided
+    if [ -n "$komari_args" ]; then
+        for arg in $komari_args; do
+            echo "        <string>$arg</string>" >> "$plist_file"
+        done
+    fi
+    
+    cat >> "$plist_file" << EOF
+    </array>
+    <key>WorkingDirectory</key>
+    <string>${target_dir}</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>UserName</key>
+    <string>${service_user}</string>
+    <key>StandardOutPath</key>
+    <string>${log_dir}/${service_name}.log</string>
+    <key>StandardErrorPath</key>
+    <string>${log_dir}/${service_name}.log</string>
+</dict>
+</plist>
+EOF
+    
+    # Load and start the service
+    if [[ "$target_dir" =~ ^/Users/.* ]] || [ "$EUID" -ne 0 ]; then
+        # User-level service
+        if launchctl bootstrap gui/$(id -u) "$plist_file"; then
+            log_success "User-level launchd service configured and started"
+        else
+            log_error "Failed to load user-level launchd service"
+            exit 1
+        fi
+    else
+        # System-level service
+        if launchctl bootstrap system "$plist_file"; then
+            log_success "System-level launchd service configured and started"
+        else
+            log_error "Failed to load system-level launchd service"
+            exit 1
+        fi
+    fi
 else
-    log_error "Unsupported init system (systemd, openrc, or procd not found)"
+    log_error "Unsupported init system (systemd, openrc, procd, or launchd not found)"
     exit 1
 fi
 
