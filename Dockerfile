@@ -10,6 +10,8 @@ COPY komari-agent-${TARGETOS}-${TARGETARCH} /app/komari-agent
 
 RUN chmod +x /app/komari-agent
 
-EXPOSE 27774
-
-CMD ["/app/komari-agent"]
+ENTRYPOINT ["/app/komari-agent"]
+# 运行时请指定参数
+# Please specify parameters at runtime.
+# eg: docker run komari-agent -e example.com -t token
+CMD ["--help"]
