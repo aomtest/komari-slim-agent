@@ -27,10 +27,14 @@ func ConnectionsCount() (tcpCount, udpCount int, err error) {
 var (
 	// 预定义常见的回环和虚拟接口名称
 	loopbackNames = map[string]struct{}{
-		"lo": {}, "lo0": {}, "localhost": {},
-		"brd0": {}, "docker0": {}, "docker1": {},
-		"veth0": {}, "veth1": {}, "veth2": {}, "veth3": {},
-		"veth4": {}, "veth5": {}, "veth6": {}, "veth7": {},
+		"br":      {},
+		"cni":     {},
+		"docker":  {},
+		"flannel": {},
+		"lo":      {},
+		"veth":    {}, // Docker
+		"virbr":   {}, // KVM
+		"vmbr":    {}, // Proxmox
 	}
 )
 
@@ -296,8 +300,10 @@ func parseNics(nics string) map[string]struct{} {
 
 func shouldInclude(nicName string, includeNics, excludeNics map[string]struct{}) bool {
 	// 默认排除回环接口
-	if _, isLoopback := loopbackNames[nicName]; isLoopback {
-		return false
+	for loopbackName := range loopbackNames {
+		if strings.HasPrefix(nicName, loopbackName) {
+			return false
+		}
 	}
 
 	// 如果定义了白名单，则只包括白名单中的接口
