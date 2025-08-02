@@ -6,10 +6,15 @@ package monitoring
 import (
 	"bufio"
 	"os"
+	"os/exec"
 	"strings"
 )
 
 func OSName() string {
+	if pveVersion := detectProxmoxVE(); pveVersion != "" {
+		return pveVersion
+	}
+	
 	if synologyName := detectSynology(); synologyName != "" {
 		return synologyName
 	}
@@ -94,4 +99,60 @@ func readSynologyInfo(filename string) string {
 	}
 	
 	return ""
+}
+
+func detectProxmoxVE() string {
+	if _, err := exec.LookPath("pveversion"); err != nil {
+		return ""
+	}
+	
+	out, err := exec.Command("pveversion").Output()
+	if err != nil {
+		return ""
+	}
+	
+	output := strings.TrimSpace(string(out))
+	lines := strings.Split(output, "\n")
+	
+	var version string
+	var codename string
+	
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		
+		if strings.HasPrefix(line, "pve-manager/") {
+			parts := strings.Split(line, "/")
+			if len(parts) >= 2 {
+				versionPart := parts[1]
+				if idx := strings.Index(versionPart, "~"); idx != -1 {
+					versionPart = versionPart[:idx]
+				}
+				version = versionPart
+			}
+		}
+		
+	}
+	
+	if version != "" {
+		if file, err := os.Open("/etc/os-release"); err == nil {
+			defer file.Close()
+			scanner := bufio.NewScanner(file)
+			for scanner.Scan() {
+				line := scanner.Text()
+				if strings.HasPrefix(line, "VERSION_CODENAME=") {
+					codename = strings.Trim(line[len("VERSION_CODENAME="):], `"`)
+					break
+				}
+			}
+		}
+	}
+	
+	if version != "" {
+		if codename != "" {
+			return "Proxmox VE " + version + " (" + codename + ")"
+		}
+		return "Proxmox VE " + version
+	}
+	
+	return "Proxmox VE"
 }
