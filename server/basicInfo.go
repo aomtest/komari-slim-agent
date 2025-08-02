@@ -35,6 +35,7 @@ func uploadBasicInfo() error {
 	cpu := monitoring.Cpu()
 
 	osname := monitoring.OSName()
+	kernelVersion := monitoring.KernelVersion()
 	ipv4, ipv6, _ := monitoring.GetIPAddress()
 
 	data := map[string]interface{}{
@@ -42,6 +43,7 @@ func uploadBasicInfo() error {
 		"cpu_cores":      cpu.CPUCores,
 		"arch":           cpu.CPUArchitecture,
 		"os":             osname,
+		"kernel_version": kernelVersion,
 		"ipv4":           ipv4,
 		"ipv6":           ipv6,
 		"mem_total":      monitoring.Ram().Total,

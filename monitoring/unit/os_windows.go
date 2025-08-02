@@ -48,3 +48,27 @@ func OSName() string {
 
 	return productName
 }
+
+// KernelVersion returns the kernel version on Windows systems (build number)
+func KernelVersion() string {
+	key, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows NT\CurrentVersion`, registry.QUERY_VALUE)
+	if err != nil {
+		return "Unknown"
+	}
+	defer key.Close()
+
+	// Get current build number
+	buildNumber, _, err := key.GetStringValue("CurrentBuild")
+	if err != nil {
+		return "Unknown"
+	}
+
+	// Get UBR (Update Build Revision) if available
+	ubr, _, err := key.GetIntegerValue("UBR")
+	if err != nil {
+		// UBR not available, just return build number
+		return buildNumber
+	}
+
+	return buildNumber + "." + strconv.FormatUint(ubr, 10)
+}

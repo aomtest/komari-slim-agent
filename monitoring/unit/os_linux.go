@@ -156,3 +156,13 @@ func detectProxmoxVE() string {
 	
 	return "Proxmox VE"
 }
+
+// KernelVersion returns the kernel version on Linux systems
+func KernelVersion() string {
+	out, err := exec.Command("uname", "-r").Output()
+	if err != nil {
+		return "Unknown"
+	}
+	
+	return strings.TrimSpace(string(out))
+}
