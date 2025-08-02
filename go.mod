@@ -6,8 +6,8 @@ require (
 	github.com/UserExistsError/conpty v0.1.4
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/creack/pty v1.1.24
-	github.com/go-ping/ping v1.2.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/prometheus-community/pro-bing v0.7.0
 	github.com/rhysd/go-github-selfupdate v1.2.3
 	github.com/shirou/gopsutil/v4 v4.25.6
 	github.com/spf13/cobra v1.9.1
@@ -19,7 +19,7 @@ require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/google/go-github/v30 v30.1.0 // indirect
 	github.com/google/go-querystring v1.0.0 // indirect
-	github.com/google/uuid v1.2.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/go-update v0.0.0-20160112193335-8152e7eb6ccf // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
@@ -31,7 +31,7 @@ require (
 	github.com/ulikunitz/xz v0.5.9 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/crypto v0.39.0 // indirect
-	golang.org/x/net v0.21.0 // indirect
+	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
+	golang.org/x/sync v0.13.0 // indirect
 )
