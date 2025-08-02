@@ -321,3 +321,30 @@ func shouldInclude(nicName string, includeNics, excludeNics map[string]struct{})
 
 	return true
 }
+
+func InterfaceList() ([]string, error) {
+	includeNics := parseNics(flags.IncludeNics)
+	excludeNics := parseNics(flags.ExcludeNics)
+	interfaces := []string{}
+	if flags.MonthRotate != 0 {
+		vnstatData, err := getVnstatData()
+		if err == nil {
+			for interfaceName := range vnstatData {
+				if shouldInclude(interfaceName, includeNics, excludeNics) {
+					interfaces = append(interfaces, interfaceName)
+				}
+			}
+			return interfaces, nil
+		}
+	}
+	ioCounters, err := net.IOCounters(true)
+	if err != nil {
+		return nil, err
+	}
+	for _, interfaceStats := range ioCounters {
+		if shouldInclude(interfaceStats.Name, includeNics, excludeNics) {
+			interfaces = append(interfaces, interfaceStats.Name)
+		}
+	}
+	return interfaces, nil
+}

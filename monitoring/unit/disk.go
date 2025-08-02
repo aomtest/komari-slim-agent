@@ -90,3 +90,27 @@ func isPhysicalDisk(part disk.PartitionStat) bool {
 
 	return true
 }
+
+func DiskList() ([]string, error) {
+	diskList := []string{}
+	if flags.IncludeMountpoints != "" {
+		includeMounts := strings.Split(flags.IncludeMountpoints, ";")
+		for _, mountpoint := range includeMounts {
+			mountpoint = strings.TrimSpace(mountpoint)
+			if mountpoint != "" {
+				diskList = append(diskList, mountpoint)
+			}
+		}
+	} else {
+		usage, err := disk.Partitions(false)
+		if err != nil {
+			return nil, err
+		}
+		for _, part := range usage {
+			if isPhysicalDisk(part) {
+				diskList = append(diskList, part.Mountpoint)
+			}
+		}
+	}
+	return diskList, nil
+}
