@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/komari-monitor/komari-agent/cmd/flags"
+	monitoring "github.com/komari-monitor/komari-agent/monitoring/unit"
 	"github.com/komari-monitor/komari-agent/server"
 	"github.com/komari-monitor/komari-agent/update"
 	"github.com/spf13/cobra"
@@ -19,6 +20,16 @@ var RootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Println("Komari Agent", update.CurrentVersion)
 		log.Println("Github Repo:", update.Repo)
+		diskList, err := monitoring.DiskList()
+		if err != nil {
+			log.Println("Failed to get disk list:", err)
+		}
+		log.Println("Monitoring Mountpoints:", diskList)
+		interfaceList, err := monitoring.InterfaceList()
+		if err != nil {
+			log.Println("Failed to get interface list:", err)
+		}
+		log.Println("Monitoring Interfaces:", interfaceList)
 
 		// 忽略不安全的证书
 		if flags.IgnoreUnsafeCert {
