@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	ping "github.com/go-ping/ping"
 	"github.com/komari-monitor/komari-agent/cmd/flags"
 	"github.com/komari-monitor/komari-agent/ws"
+	ping "github.com/prometheus-community/pro-bing"
 )
 
 func NewTask(task_id, command string) {
