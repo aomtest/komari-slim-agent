@@ -30,6 +30,7 @@ var (
 		"br":      {},
 		"cni":     {},
 		"docker":  {},
+		"podman":  {},
 		"flannel": {},
 		"lo":      {},
 		"veth":    {}, // Docker
