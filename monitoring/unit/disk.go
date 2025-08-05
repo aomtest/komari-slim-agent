@@ -59,32 +59,49 @@ func isPhysicalDisk(part disk.PartitionStat) bool {
 		return true
 	}
 	mountpoint := strings.ToLower(part.Mountpoint)
-	// 临时文件系统
-	if mountpoint == "/tmp" || mountpoint == "/var/tmp" || mountpoint == "/dev/shm" ||
-		mountpoint == "/run" || mountpoint == "/run/lock" {
-		return false
+	// 排除挂载点
+	var mountpointsToExclude = []string{
+		"/tmp",
+		"/var/tmp",
+		"/dev/shm",
+		"/run",
+		"/run/lock",
+		"/run/user/",
+		"/var/lib/containers/",
+		"/var/lib/docker/",
+	}
+	for _, mp := range mountpointsToExclude {
+		if mountpoint == mp || strings.HasPrefix(mountpoint, mp) {
+			return false
+		}
 	}
 
 	fstype := strings.ToLower(part.Fstype)
-	// 网络驱动器
-	if strings.HasPrefix(fstype, "nfs") || strings.HasPrefix(fstype, "cifs") ||
-		strings.HasPrefix(fstype, "smb") || fstype == "vboxsf" || fstype == "9p" ||
-		strings.Contains(fstype, "fuse") {
-		return false
-	} // Windows 网络驱动器通常是映射盘符，但不容易通过fstype判断
+	var fstypeToExclude = []string{
+		"tmpfs",
+		"devtmpfs",
+		"nfs",
+		"cifs",
+		"smb",
+		"vboxsf",
+		"9p",
+		"fuse",
+		"overlay",
+	}
+	for _, fs := range fstypeToExclude {
+		if fstype == fs || strings.HasPrefix(fstype, fs) {
+			return false
+		}
+	}
+	// Windows 网络驱动器通常是映射盘符，但不容易通过fstype判断
 	// 可以通过opts判断，Windows网络驱动通常有相关选项
 	optsStr := strings.ToLower(strings.Join(part.Opts, ","))
 	if strings.Contains(optsStr, "remote") || strings.Contains(optsStr, "network") {
 		return false
 	}
 
-	// Docker overlay
-	if fstype == "overlay" {
-		return false
-	}
-
 	// 虚拟内存
-	if strings.HasPrefix(part.Device, "/dev/loop") || fstype == "devtmpfs" || fstype == "tmpfs" {
+	if strings.HasPrefix(part.Device, "/dev/loop") {
 		return false
 	}
 
