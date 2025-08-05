@@ -27,7 +27,7 @@ func NewTask(task_id, command string) {
 		return
 	}
 	if flags.DisableWebSsh {
-		uploadTaskResult(task_id, "Web SSH (REC) is disabled.", -1, time.Now())
+		uploadTaskResult(task_id, "Remote control is disabled.", -1, time.Now())
 		return
 	}
 	log.Printf("Executing task %s with command: %s", task_id, command)
