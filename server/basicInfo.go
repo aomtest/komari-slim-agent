@@ -54,6 +54,20 @@ func uploadBasicInfo() error {
 		"version":        update.CurrentVersion,
 	}
 
+	// 尝试上传完整数据
+	err := tryUploadData(data)
+	if err != nil {
+		// 兼容 <= 1.0.2
+		delete(data, "kernel_version")
+		err = tryUploadData(data)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func tryUploadData(data map[string]interface{}) error {
 	endpoint := strings.TrimSuffix(flags.Endpoint, "/") + "/api/clients/uploadBasicInfo?token=" + flags.Token
 	payload, err := json.Marshal(data)
 	if err != nil {
