@@ -235,9 +235,11 @@ func NewPingTask(conn *ws.SafeConn, taskID uint, pingType, pingTarget string) {
 		"value":       pingResult,
 		"finished_at": time.Now(),
 	}
-	if pingResult == -1 {
-		return
-	}
+	// https://github.com/komari-monitor/komari/commit/eb87a4fc330b7d1c407fa4ff70177615a4f50a1f
+	// -1 代表丢包，服务端计算
+	//if pingResult == -1 {
+	//	return
+	//}
 	if err := conn.WriteJSON(payload); err != nil {
 		log.Printf("Failed to write JSON to WebSocket: %v", err)
 	}
