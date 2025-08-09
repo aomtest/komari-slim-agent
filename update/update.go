@@ -60,7 +60,7 @@ func CheckAndUpdate() error {
 
 	// Determine if update is needed
 	if latest.Version.Equals(currentSemVer) {
-		fmt.Println("Current version is the latest:", CurrentVersion)
+		log.Println("Current version is the latest:", CurrentVersion)
 		return nil
 	}
 	// Default is installed as a service, so don't automatically restart
@@ -75,7 +75,7 @@ func CheckAndUpdate() error {
 	// if err != nil {
 	// 	return fmt.Errorf("failed to restart program: %v", err)
 	// }
-	fmt.Printf("Successfully updated to version %s\n", latest.Version)
+	log.Printf("Successfully updated to version %s\n", latest.Version)
 	os.Exit(42)
 	return nil
 }

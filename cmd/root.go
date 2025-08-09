@@ -20,6 +20,14 @@ var RootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Println("Komari Agent", update.CurrentVersion)
 		log.Println("Github Repo:", update.Repo)
+		// Auto discovery
+		if flags.AutoDiscoveryKey != "" {
+			err := handleAutoDiscovery()
+			if err != nil {
+				log.Printf("Auto-discovery failed: %v", err)
+				os.Exit(1)
+			}
+		}
 		diskList, err := monitoring.DiskList()
 		if err != nil {
 			log.Println("Failed to get disk list:", err)
@@ -68,9 +76,10 @@ func Execute() {
 
 func init() {
 	RootCmd.PersistentFlags().StringVarP(&flags.Token, "token", "t", "", "API token")
-	RootCmd.MarkPersistentFlagRequired("token")
+	//RootCmd.MarkPersistentFlagRequired("token")
 	RootCmd.PersistentFlags().StringVarP(&flags.Endpoint, "endpoint", "e", "", "API endpoint")
 	RootCmd.MarkPersistentFlagRequired("endpoint")
+	RootCmd.PersistentFlags().StringVar(&flags.AutoDiscoveryKey, "auto-discovery", "", "Auto discovery key for the agent")
 	RootCmd.PersistentFlags().BoolVar(&flags.DisableAutoUpdate, "disable-auto-update", false, "Disable automatic updates")
 	RootCmd.PersistentFlags().BoolVar(&flags.DisableWebSsh, "disable-web-ssh", false, "Disable remote control(web ssh and rce)")
 	RootCmd.PersistentFlags().BoolVar(&flags.MemoryModeAvailable, "memory-mode-available", false, "Report memory as available instead of used.")

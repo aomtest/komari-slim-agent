@@ -1,6 +1,7 @@
 package flags
 
 var (
+	AutoDiscoveryKey     string
 	DisableAutoUpdate   bool
 	DisableWebSsh       bool
 	MemoryModeAvailable bool

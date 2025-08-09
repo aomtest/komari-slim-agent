@@ -5,3 +5,4 @@ komari-agent.exe
 komari-agent
 .komari-agent.exe.old
 build/
+auto-discovery.json
