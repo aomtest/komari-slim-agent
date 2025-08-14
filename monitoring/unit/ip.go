@@ -10,45 +10,43 @@ import (
 	"time"
 )
 
-var userAgent = "curl/8.0.1"
-
-func ipv4Transport() *http.Transport {
-	return &http.Transport{
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			d := net.Dialer{
-				Timeout:   15 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}
-			return d.DialContext(ctx, "tcp4", addr) // 锁v4防止出现问题
+var (
+	ipv4HTTPClient = &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				d := net.Dialer{
+					Timeout:   15 * time.Second,
+					KeepAlive: 30 * time.Second,
+				}
+				return d.DialContext(ctx, "tcp4", addr) // 锁v4防止出现问题
+			},
+			MaxIdleConns:          10,
+			IdleConnTimeout:       30 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
 		},
-		MaxIdleConns:          10,
-		IdleConnTimeout:       30 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
+		Timeout: 15 * time.Second,
 	}
-}
-
-func ipv6Transport() *http.Transport {
-	return &http.Transport{
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			d := net.Dialer{
-				Timeout:   15 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}
-			return d.DialContext(ctx, "tcp6", addr) // 锁v6防止出现问题
+	ipv6HTTPClient = &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				d := net.Dialer{
+					Timeout:   15 * time.Second,
+					KeepAlive: 30 * time.Second,
+				}
+				return d.DialContext(ctx, "tcp6", addr) // 锁v6防止出现问题
+			},
+			MaxIdleConns:          10,
+			IdleConnTimeout:       30 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
 		},
-		MaxIdleConns:          10,
-		IdleConnTimeout:       30 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
+		Timeout: 15 * time.Second,
 	}
-}
+	userAgent = "curl/8.0.1"
+)
 
 func GetIPv4Address() (string, error) {
-	client := &http.Client{
-		Transport: ipv4Transport(),
-		Timeout:   15 * time.Second,
-	}
 
 	webAPIs := []string{
 		"https://www.visa.cn/cdn-cgi/trace",
@@ -67,7 +65,7 @@ func GetIPv4Address() (string, error) {
 			continue
 		}
 		req.Header.Set("User-Agent", userAgent)
-		resp, err := client.Do(req)
+		resp, err := ipv4HTTPClient.Do(req)
 		if err != nil {
 			continue
 		}
@@ -87,10 +85,6 @@ func GetIPv4Address() (string, error) {
 }
 
 func GetIPv6Address() (string, error) {
-	client := &http.Client{
-		Transport: ipv6Transport(), // 对于v6请求只使用v6
-		Timeout:   15 * time.Second,
-	}
 
 	webAPIs := []string{
 		"https://v6.ip.zxinc.org/info.php?type=json",
@@ -106,7 +100,7 @@ func GetIPv6Address() (string, error) {
 			continue
 		}
 		req.Header.Set("User-Agent", userAgent)
-		resp, err := client.Do(req)
+		resp, err := ipv6HTTPClient.Do(req)
 		if err != nil {
 			continue
 		}
