@@ -7,6 +7,7 @@ require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/creack/pty v1.1.24
 	github.com/gorilla/websocket v1.5.3
+	github.com/klauspost/cpuid/v2 v2.3.0
 	github.com/prometheus-community/pro-bing v0.7.0
 	github.com/rhysd/go-github-selfupdate v1.2.3
 	github.com/shirou/gopsutil/v4 v4.25.6
