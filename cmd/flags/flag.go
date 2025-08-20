@@ -16,4 +16,6 @@ var (
 	ExcludeNics         string
 	IncludeMountpoints  string
 	MonthRotate         int
+	CFAccessClientID    string
+	CFAccessClientSecret string
 )
