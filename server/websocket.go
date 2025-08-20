@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 	"time"
 
@@ -92,7 +93,15 @@ func connectWebSocket(websocketEndpoint string) (*ws.SafeConn, error) {
 	dialer := &websocket.Dialer{
 		HandshakeTimeout: 5 * time.Second,
 	}
-	conn, resp, err := dialer.Dial(websocketEndpoint, nil)
+	
+	// 创建请求头并添加Cloudflare Access头部
+	headers := http.Header{}
+	if flags.CFAccessClientID != "" && flags.CFAccessClientSecret != "" {
+		headers.Set("CF-Access-Client-Id", flags.CFAccessClientID)
+		headers.Set("CF-Access-Client-Secret", flags.CFAccessClientSecret)
+	}
+	
+	conn, resp, err := dialer.Dial(websocketEndpoint, headers)
 	if err != nil {
 		if resp != nil && resp.StatusCode != 101 {
 			return nil, fmt.Errorf("%s", resp.Status)
@@ -153,7 +162,15 @@ func establishTerminalConnection(token, id, endpoint string) {
 	dialer := &websocket.Dialer{
 		HandshakeTimeout: 5 * time.Second,
 	}
-	conn, _, err := dialer.Dial(endpoint, nil)
+	
+	// 创建请求头并添加Cloudflare Access头部
+	headers := http.Header{}
+	if flags.CFAccessClientID != "" && flags.CFAccessClientSecret != "" {
+		headers.Set("CF-Access-Client-Id", flags.CFAccessClientID)
+		headers.Set("CF-Access-Client-Secret", flags.CFAccessClientSecret)
+	}
+	
+	conn, _, err := dialer.Dial(endpoint, headers)
 	if err != nil {
 		log.Println("Failed to establish terminal connection:", err)
 		return

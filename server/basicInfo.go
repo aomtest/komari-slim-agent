@@ -79,6 +79,12 @@ func tryUploadData(data map[string]interface{}) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	
+	// 添加Cloudflare Access头部
+	if flags.CFAccessClientID != "" && flags.CFAccessClientSecret != "" {
+		req.Header.Set("CF-Access-Client-Id", flags.CFAccessClientID)
+		req.Header.Set("CF-Access-Client-Secret", flags.CFAccessClientSecret)
+	}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
