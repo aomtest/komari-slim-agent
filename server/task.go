@@ -77,7 +77,7 @@ func uploadTaskResult(taskID, result string, exitCode int, finishedAt time.Time)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	// 添加Cloudflare Access头部（如果配置了）
 	if flags.CFAccessClientID != "" && flags.CFAccessClientSecret != "" {
 		req.Header.Set("CF-Access-Client-Id", flags.CFAccessClientID)
@@ -221,27 +221,48 @@ func NewPingTask(conn *ws.SafeConn, taskID uint, pingType, pingTarget string) {
 	var err error = nil
 	var latency int64
 	pingResult := -1
-	timeout := 3 * time.Second // 默认超时时间
-	switch pingType {
-	case "icmp":
-		if latency, err = icmpPing(pingTarget, timeout); err == nil {
-			pingResult = int(latency)
+	timeout := 3 * time.Second        // 默认超时时间
+	const highLatencyThreshold = 1000 // ms 阈值
+
+	measure := func() (int64, error) {
+		switch pingType {
+		case "icmp":
+			return icmpPing(pingTarget, timeout)
+		case "tcp":
+			return tcpPing(pingTarget, timeout)
+		case "http":
+			return httpPing(pingTarget, timeout)
+		default:
+			return -1, errors.New("unsupported ping type")
 		}
-	case "tcp":
-		if latency, err = tcpPing(pingTarget, timeout); err == nil {
-			pingResult = int(latency)
-		}
-	case "http":
-		if latency, err = httpPing(pingTarget, timeout); err == nil {
-			pingResult = int(latency)
-		}
-	default:
-		log.Printf("Unsupported ping type: %s", pingType)
-		return
 	}
+	PingHighLatencyRetries := 3
+	// 首次测量
+	if latency, err = measure(); err == nil {
+		if latency > int64(highLatencyThreshold) && PingHighLatencyRetries > 0 {
+			attempts := PingHighLatencyRetries
+			for i := 0; i < attempts; i++ {
+				if second, err2 := measure(); err2 == nil {
+					if second <= int64(highLatencyThreshold) {
+						latency = second
+						break
+					}
+					if i == attempts-1 { // 最后一次仍高
+						err = errors.New("latency remains high after retries")
+					}
+				} else {
+					err = err2
+					break
+				}
+			}
+		}
+	}
+
 	if err != nil {
 		log.Printf("Ping task %d failed: %v", taskID, err)
 		pingResult = -1 // 如果有错误，设置结果为 -1
+	} else {
+		pingResult = int(latency)
 	}
 	payload := map[string]interface{}{
 		"type":        "ping_result",
