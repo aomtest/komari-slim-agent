@@ -21,28 +21,33 @@ func OSName() string {
 	if err != nil {
 		return "Microsoft Windows"
 	}
-	// 如果是 Server 版本，直接返回原始名称
+
+	// Server 版本保持原样
 	if strings.Contains(productName, "Server") {
 		return productName
 	}
 
-	// Windows 11
-	majorVersion, _, err := key.GetIntegerValue("CurrentMajorVersionNumber")
-	if err == nil && majorVersion >= 10 {
-		buildNumberStr, _, err := key.GetStringValue("CurrentBuild")
-		if err == nil {
-			buildNumber, err := strconv.Atoi(buildNumberStr)
-			if err == nil && buildNumber >= 22000 { // Windows 11 starts at build 22000
-				// Windows 11 Windows 10 Pro for Workstations
-				edition := strings.Replace(productName, "Windows 10 ", "", 1)
+	// 如果注册表已经直接提供 Windows 11 名称，直接返回
+	if strings.Contains(productName, "Windows 11") {
+		return productName
+	}
+
+	// Windows 11 从 build 22000 起。DisplayVersion 在 Win10 21H2 也会是 21H2，不能作为判断依据。
+	buildNumberStr, _, err := key.GetStringValue("CurrentBuild")
+	if err == nil {
+		if buildNumber, err2 := strconv.Atoi(buildNumberStr); err2 == nil && buildNumber >= 22000 {
+			// 旧字段可能仍然写着 Windows 10，把前缀替换为 Windows 11
+			if strings.HasPrefix(productName, "Windows 10 ") {
+				edition := strings.TrimPrefix(productName, "Windows 10 ")
 				return "Windows 11 " + edition
 			}
-		}
-		// DisplayVersion
-		displayVersion, _, err := key.GetStringValue("DisplayVersion")
-		if err == nil && displayVersion >= "21H2" {
-			edition := strings.Replace(productName, "Windows 10 ", "", 1)
-			return "Windows 11 " + edition
+			if productName == "Windows 10" { // 极端精简情况
+				return "Windows 11"
+			}
+			// 如果不是以 Windows 10 开头，但 build 已经 >= 22000，直接补成 Windows 11 + 原名称尾部
+			if !strings.Contains(productName, "Windows 11") {
+				return strings.Replace(productName, "Windows 10", "Windows 11", 1)
+			}
 		}
 	}
 
