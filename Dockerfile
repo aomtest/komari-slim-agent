@@ -10,6 +10,8 @@ COPY komari-agent-${TARGETOS}-${TARGETARCH} /app/komari-agent
 
 RUN chmod +x /app/komari-agent
 
+RUN touch /.komari-agent-container
+
 ENTRYPOINT ["/app/komari-agent"]
 # 运行时请指定参数
 # Please specify parameters at runtime.
