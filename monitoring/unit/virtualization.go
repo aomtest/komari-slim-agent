@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -70,37 +71,23 @@ func detectByCPUID() string {
 // detectContainer attempts to detect common Linux container environments when systemd isn't available.
 // Returns a systemd-detect-virt-like string such as "docker", "podman", "lxc", "container" or empty if not detected.
 func detectContainer() string {
-	// Quick file markers used by Docker/Podman/CRI-O
+	// Definite file markers first.
 	if fileExists("/.dockerenv") {
 		return "docker"
 	}
-	if fileExists("/run/.containerenv") {
-		// podman/cri-o often drop this file
-		// Try to refine using cgroup content.
+	if fileExists("/run/.containerenv") { // podman / CRI-O
 		if s := parseCgroupForContainer(); s != "" {
 			return s
 		}
 		return "container"
 	}
 
-	// Check cgroup info for container keywords.
+	// cgroup based detection (safer & more specific than broad substring checks)
 	if s := parseCgroupForContainer(); s != "" {
 		return s
 	}
 
-	// Check mounts for overlay/containers hints.
-	if data, err := os.ReadFile("/proc/self/mountinfo"); err == nil {
-		lower := strings.ToLower(string(data))
-		switch {
-		case strings.Contains(lower, "/docker/"):
-			return "docker"
-		case strings.Contains(lower, "/containers/overlay-containers/") || strings.Contains(lower, "/lib/containers/"):
-			return "podman"
-		case strings.Contains(lower, "/kubelet/"):
-			return "kubernetes"
-		}
-	}
-
+	// (Removed mountinfo heuristics which caused host false positives when Docker/Kube tools are installed.)
 	return ""
 }
 
@@ -112,23 +99,39 @@ func fileExists(p string) bool {
 }
 
 func parseCgroupForContainer() string {
-	// cgroup v1 & v2 paths can contain docker, kubepods, containerd, crio, lxc, podman
-	if data, err := os.ReadFile("/proc/self/cgroup"); err == nil {
-		lower := strings.ToLower(string(data))
-		switch {
-		case strings.Contains(lower, "docker"):
-			return "docker"
-		case strings.Contains(lower, "containerd"):
-			return "container"
-		case strings.Contains(lower, "kubepods") || strings.Contains(lower, "kubelet"):
-			return "kubernetes"
-		case strings.Contains(lower, "crio"):
-			return "container"
-		case strings.Contains(lower, "lxc"):
-			return "lxc"
-		case strings.Contains(lower, "podman"):
-			return "podman"
-		}
+	data, err := os.ReadFile("/proc/self/cgroup")
+	if err != nil {
+		return ""
 	}
+	lower := strings.ToLower(string(data))
+
+	// Precompile (once) regex patterns for common container runtimes.
+	// Patterns target leaf elements referencing container IDs instead of any occurrence of runtime name to reduce false positives.
+	var (
+		dockerIDPattern    = regexp.MustCompile(`(?m)/(?:docker|cri-containerd)[/-]([0-9a-f]{12,64})(?:\.scope)?$`)
+		dockerScopePattern = regexp.MustCompile(`(?m)/docker-[0-9a-f]{12,64}\.scope$`)
+		kubePattern        = regexp.MustCompile(`(?m)/kubepods[/.].*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}).*`) // pod UID
+		podmanPattern      = regexp.MustCompile(`(?m)/(?:libpod|podman)[-_]([0-9a-f]{12,64})(?:\.scope)?$`)
+		lxcPattern         = regexp.MustCompile(`(?m)/lxc/[^/]+$`)
+		crioPattern        = regexp.MustCompile(`(?m)/crio-[0-9a-f]{12,64}\.scope$`)
+	)
+
+	// Order: specific runtime before generic container.
+	if dockerIDPattern.FindStringIndex(lower) != nil || dockerScopePattern.FindStringIndex(lower) != nil {
+		return "docker"
+	}
+	if podmanPattern.FindStringIndex(lower) != nil {
+		return "podman"
+	}
+	if crioPattern.FindStringIndex(lower) != nil {
+		return "container" // CRI-O generic
+	}
+	if kubePattern.FindStringIndex(lower) != nil {
+		return "kubernetes"
+	}
+	if lxcPattern.FindStringIndex(lower) != nil {
+		return "lxc"
+	}
+
 	return ""
 }
