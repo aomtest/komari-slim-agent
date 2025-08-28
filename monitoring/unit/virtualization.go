@@ -1,7 +1,6 @@
 package monitoring
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"regexp"
@@ -41,31 +40,30 @@ func detectByCPUID() string {
 		return "none"
 	}
 	vendor := strings.ToLower(cpuid.CPU.HypervisorVendorString)
-	switch {
-	case vendor == "kvm" || strings.Contains(vendor, "kvm"):
-		return "kvm"
-	case vendor == "microsoft" || strings.Contains(vendor, "hyper-v") || strings.Contains(vendor, "msvm") || strings.Contains(vendor, "mshyperv"):
-		return "microsoft" // systemd uses "microsoft" for Hyper-V/WSL
-	case strings.Contains(vendor, "vmware"):
-		return "vmware"
-	case strings.Contains(vendor, "xen"):
-		return "xen"
-	case strings.Contains(vendor, "bhyve"):
-		return "bhyve"
-	case strings.Contains(vendor, "qemu"):
-		return "qemu"
-	case strings.Contains(vendor, "parallels"):
-		return "parallels"
-	case strings.Contains(vendor, "oracle") || strings.Contains(vendor, "virtualbox") || strings.Contains(vendor, "vbox"):
-		return "oracle" // systemd reports "oracle" for VirtualBox
-	case strings.Contains(vendor, "acrn"):
-		return "acrn"
-	default:
-		if vendor != "" {
-			return fmt.Sprintf("hypervisor:%s", vendor)
-		}
-		return "virtualized"
+
+	vendorMap := map[string][]string{
+		"kvm":       {"kvm"},
+		"microsoft": {"microsoft", "hyper-v", "msvm", "mshyperv"},
+		"vmware":    {"vmware"},
+		"xen":       {"xen"},
+		"bhyve":     {"bhyve"},
+		"qemu":      {"qemu"},
+		"parallels": {"parallels"},
+		"oracle":    {"oracle", "virtualbox", "vbox"},
+		"acrn":      {"acrn"},
 	}
+
+	for name, keys := range vendorMap {
+		for _, key := range keys {
+			if vendor == key || strings.Contains(vendor, key) {
+				return name
+			}
+		}
+	}
+	if vendor != "" {
+		return vendor
+	}
+	return "virtualized"
 }
 
 // detectContainer attempts to detect common Linux container environments when systemd isn't available.
