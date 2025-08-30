@@ -66,9 +66,9 @@ func isPhysicalDisk(part disk.PartitionStat) bool {
 		"/dev/shm",
 		"/run",
 		"/run/lock",
-		"/run/user/",
-		"/var/lib/containers/",
-		"/var/lib/docker/",
+		"/run/user",
+		"/var/lib/containers",
+		"/var/lib/docker",
 	}
 	for _, mp := range mountpointsToExclude {
 		if mountpoint == mp || strings.HasPrefix(mountpoint, mp) {
