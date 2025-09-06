@@ -68,7 +68,7 @@ func Execute() {
 			break
 		}
 		if arg == "-memory-mode-available" || arg == "--memory-mode-available" {
-			flags.MemoryIncludeCache = true
+			//flags.MemoryIncludeCache = true
 			log.Println("WARNING: The --memory-mode-available flag is deprecated in version 1.0.70 and later. Use --memory-include-cache to report memory usage including cache/buffer.")
 			os.Args = append(os.Args[:i], os.Args[i+1:]...)
 		}
