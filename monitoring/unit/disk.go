@@ -1,6 +1,7 @@
 package monitoring
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/komari-monitor/komari-agent/cmd/flags"
@@ -14,7 +15,7 @@ type DiskInfo struct {
 
 func Disk() DiskInfo {
 	diskinfo := DiskInfo{}
-	usage, err := disk.Partitions(false) // 使用 false 只获取物理分区
+	usage, err := disk.Partitions(true)
 	if err != nil {
 		diskinfo.Total = 0
 		diskinfo.Used = 0
@@ -69,6 +70,13 @@ func isPhysicalDisk(part disk.PartitionStat) bool {
 		"/run/user",
 		"/var/lib/containers",
 		"/var/lib/docker",
+		"/proc",
+		"/dev/pts",
+		"/sys",
+		"/sys/fs/cgroup",
+		"/dev/mqueue",
+		"/etc/resolv.conf",
+		"/etc/host", // /etc/hosts,/etc/hostname
 	}
 	for _, mp := range mountpointsToExclude {
 		if mountpoint == mp || strings.HasPrefix(mountpoint, mp) {
@@ -87,6 +95,11 @@ func isPhysicalDisk(part disk.PartitionStat) bool {
 		"9p",
 		"fuse",
 		"overlay",
+		"proc",
+		"devpts",
+		"sysfs",
+		"cgroup",
+		"mqueue",
 	}
 	for _, fs := range fstypeToExclude {
 		if fstype == fs || strings.HasPrefix(fstype, fs) {
@@ -119,13 +132,13 @@ func DiskList() ([]string, error) {
 			}
 		}
 	} else {
-		usage, err := disk.Partitions(false)
+		usage, err := disk.Partitions(true)
 		if err != nil {
 			return nil, err
 		}
 		for _, part := range usage {
 			if isPhysicalDisk(part) {
-				diskList = append(diskList, part.Mountpoint)
+				diskList = append(diskList, fmt.Sprintf("%s (%s)", part.Mountpoint, part.Fstype))
 			}
 		}
 	}
