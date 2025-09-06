@@ -18,9 +18,9 @@ func Ram() RamInfo {
 		raminfo.Used = 0
 		return raminfo
 	}
-	if flags.MemoryModeAvailable {
+	if flags.MemoryIncludeCache {
 		raminfo.Total = v.Total
-		raminfo.Used = v.Total - v.Available
+		raminfo.Used = v.Total - v.Free
 		return raminfo
 	}
 	raminfo.Total = v.Total
