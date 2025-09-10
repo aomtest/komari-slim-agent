@@ -19,4 +19,5 @@ var (
 	CFAccessClientID     string
 	CFAccessClientSecret string
 	MemoryIncludeCache   bool
+	EnableGPU            bool   // 启用详细GPU监控
 )
