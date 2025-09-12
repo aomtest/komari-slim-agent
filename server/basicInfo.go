@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/komari-monitor/komari-agent/cmd/flags"
+	"github.com/komari-monitor/komari-agent/dnsresolver"
 	monitoring "github.com/komari-monitor/komari-agent/monitoring/unit"
 	"github.com/komari-monitor/komari-agent/update"
 )
@@ -79,14 +80,16 @@ func tryUploadData(data map[string]interface{}) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	// 添加Cloudflare Access头部
 	if flags.CFAccessClientID != "" && flags.CFAccessClientSecret != "" {
 		req.Header.Set("CF-Access-Client-Id", flags.CFAccessClientID)
 		req.Header.Set("CF-Access-Client-Secret", flags.CFAccessClientSecret)
 	}
 
-	client := &http.Client{}
+	// 使用dnsresolver获取自定义HTTP客户端
+	client := dnsresolver.GetHTTPClient(30 * time.Second)
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return err

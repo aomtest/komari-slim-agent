@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/komari-monitor/komari-agent/cmd/flags"
+	"github.com/komari-monitor/komari-agent/dnsresolver"
 	monitoring "github.com/komari-monitor/komari-agent/monitoring/unit"
 	"github.com/komari-monitor/komari-agent/server"
 	"github.com/komari-monitor/komari-agent/update"
@@ -20,6 +21,15 @@ var RootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Println("Komari Agent", update.CurrentVersion)
 		log.Println("Github Repo:", update.Repo)
+
+		// 设置自定义DNS解析器
+		if flags.CustomDNS != "" {
+			dnsresolver.SetCustomDNSServer(flags.CustomDNS)
+			log.Printf("Using custom DNS server: %s", flags.CustomDNS)
+		} else {
+			log.Printf("Using default DNS servers, primary: %s", dnsresolver.DNSServers[0])
+		}
+
 		// Auto discovery
 		if flags.AutoDiscoveryKey != "" {
 			err := handleAutoDiscovery()
@@ -100,5 +110,6 @@ func init() {
 	RootCmd.PersistentFlags().StringVar(&flags.CFAccessClientID, "cf-access-client-id", "", "Cloudflare Access Client ID")
 	RootCmd.PersistentFlags().StringVar(&flags.CFAccessClientSecret, "cf-access-client-secret", "", "Cloudflare Access Client Secret")
 	RootCmd.PersistentFlags().BoolVar(&flags.MemoryIncludeCache, "memory-include-cache", false, "Include cache/buffer in memory usage")
+	RootCmd.PersistentFlags().StringVar(&flags.CustomDNS, "custom-dns", "", "Custom DNS server to use (e.g. 8.8.8.8)")
 	RootCmd.PersistentFlags().ParseErrorsWhitelist.UnknownFlags = true
 }

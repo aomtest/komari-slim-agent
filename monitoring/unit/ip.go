@@ -8,17 +8,17 @@ import (
 	"net/http"
 	"regexp"
 	"time"
+
+	"github.com/komari-monitor/komari-agent/dnsresolver"
 )
 
 var (
+	// 创建适用于IPv4和IPv6的HTTP客户端
 	ipv4HTTPClient = &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				d := net.Dialer{
-					Timeout:   15 * time.Second,
-					KeepAlive: 30 * time.Second,
-				}
-				return d.DialContext(ctx, "tcp4", addr) // 锁v4防止出现问题
+				dialer := dnsresolver.GetNetDialer(15 * time.Second)
+				return dialer.DialContext(ctx, "tcp4", addr) // 锁v4防止出现问题
 			},
 			MaxIdleConns:          10,
 			IdleConnTimeout:       30 * time.Second,
@@ -30,11 +30,8 @@ var (
 	ipv6HTTPClient = &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				d := net.Dialer{
-					Timeout:   15 * time.Second,
-					KeepAlive: 30 * time.Second,
-				}
-				return d.DialContext(ctx, "tcp6", addr) // 锁v6防止出现问题
+				dialer := dnsresolver.GetNetDialer(15 * time.Second)
+				return dialer.DialContext(ctx, "tcp6", addr) // 锁v6防止出现问题
 			},
 			MaxIdleConns:          10,
 			IdleConnTimeout:       30 * time.Second,

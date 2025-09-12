@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/komari-monitor/komari-agent/cmd/flags"
+	"github.com/komari-monitor/komari-agent/dnsresolver"
 	"github.com/komari-monitor/komari-agent/monitoring"
 	"github.com/komari-monitor/komari-agent/terminal"
 	"github.com/komari-monitor/komari-agent/ws"
@@ -90,17 +91,21 @@ func EstablishWebSocketConnection() {
 }
 
 func connectWebSocket(websocketEndpoint string) (*ws.SafeConn, error) {
+	// 使用dnsresolver获取自定义网络拨号器
+	netDialer := dnsresolver.GetNetDialer(5 * time.Second)
+
 	dialer := &websocket.Dialer{
 		HandshakeTimeout: 5 * time.Second,
+		NetDialContext:   netDialer.DialContext,
 	}
-	
+
 	// 创建请求头并添加Cloudflare Access头部
 	headers := http.Header{}
 	if flags.CFAccessClientID != "" && flags.CFAccessClientSecret != "" {
 		headers.Set("CF-Access-Client-Id", flags.CFAccessClientID)
 		headers.Set("CF-Access-Client-Secret", flags.CFAccessClientSecret)
 	}
-	
+
 	conn, resp, err := dialer.Dial(websocketEndpoint, headers)
 	if err != nil {
 		if resp != nil && resp.StatusCode != 101 {
@@ -159,17 +164,22 @@ func handleWebSocketMessages(conn *ws.SafeConn, done chan<- struct{}) {
 func establishTerminalConnection(token, id, endpoint string) {
 	endpoint = strings.TrimSuffix(endpoint, "/") + "/api/clients/terminal?token=" + token + "&id=" + id
 	endpoint = "ws" + strings.TrimPrefix(endpoint, "http")
+
+	// 使用dnsresolver获取自定义网络拨号器
+	netDialer := dnsresolver.GetNetDialer(5 * time.Second)
+
 	dialer := &websocket.Dialer{
 		HandshakeTimeout: 5 * time.Second,
+		NetDialContext:   netDialer.DialContext,
 	}
-	
+
 	// 创建请求头并添加Cloudflare Access头部
 	headers := http.Header{}
 	if flags.CFAccessClientID != "" && flags.CFAccessClientSecret != "" {
 		headers.Set("CF-Access-Client-Id", flags.CFAccessClientID)
 		headers.Set("CF-Access-Client-Secret", flags.CFAccessClientSecret)
 	}
-	
+
 	conn, _, err := dialer.Dial(endpoint, headers)
 	if err != nil {
 		log.Println("Failed to establish terminal connection:", err)

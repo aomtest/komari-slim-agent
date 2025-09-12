@@ -19,4 +19,5 @@ var (
 	CFAccessClientID     string
 	CFAccessClientSecret string
 	MemoryIncludeCache   bool
+	CustomDNS            string
 )
