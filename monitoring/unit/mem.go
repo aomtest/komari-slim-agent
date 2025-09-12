@@ -24,7 +24,7 @@ func Ram() RamInfo {
 		return raminfo
 	}
 	raminfo.Total = v.Total
-	raminfo.Used = v.Used
+	raminfo.Used = v.Total - v.Available
 
 	return raminfo
 }
