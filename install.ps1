@@ -40,6 +40,7 @@ if ($GitHubProxy -ne '') { $ProxyDisplay = $GitHubProxy } else { $ProxyDisplay =
 switch ($env:PROCESSOR_ARCHITECTURE) {
     'AMD64' { $arch = 'amd64' }
     'ARM64' { $arch = 'arm64' }
+    'x86' { $arch = '386' }
     Default { Log-Error "Unsupported architecture: $env:PROCESSOR_ARCHITECTURE"; exit 1 }
 }
 

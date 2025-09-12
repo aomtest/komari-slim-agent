@@ -57,6 +57,13 @@ case $os_type in
     Linux)
         os_name="linux"
         ;;
+    FreeBSD)
+        os_name="freebsd"
+        ;;
+    MINGW*|MSYS*|CYGWIN*)
+        os_name="windows"
+        target_dir="/c/komari"  # Use C:\komari on Windows
+        ;;
     *)
         log_error "Unsupported operating system: $os_type"
         exit 1
@@ -295,23 +302,45 @@ install_dependencies
 # Install vnstat if needed for month-rotate
 install_vnstat
 
+# Architecture detection with platform-specific support
 arch=$(uname -m)
 case $arch in
     x86_64)
         arch="amd64"
         ;;
-    aarch64)
+    aarch64|arm64)
         arch="arm64"
         ;;
-    arm64)
-        arch="arm64"
+    i386|i686)
+        # x86 (32-bit) support
+        case $os_name in
+            freebsd|linux|windows)
+                arch="386"
+                ;;
+            *)
+                log_error "32-bit x86 architecture not supported on $os_name"
+                exit 1
+                ;;
+        esac
+        ;;
+    armv7*|armv6*)
+        # ARM 32-bit support
+        case $os_name in
+            freebsd|linux)
+                arch="arm"
+                ;;
+            *)
+                log_error "32-bit ARM architecture not supported on $os_name"
+                exit 1
+                ;;
+        esac
         ;;
     *)
-        log_error "Unsupported architecture: $arch"
+        log_error "Unsupported architecture: $arch on $os_name"
         exit 1
         ;;
 esac
-log_info "Detected architecture: ${GREEN}$arch${NC}"
+log_info "Detected OS: ${GREEN}$os_name${NC}, Architecture: ${GREEN}$arch${NC}"
 
 version_to_install="latest"
 if [ -n "$install_version" ]; then
