@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/komari-monitor/komari-agent/cmd/flags"
 	monitoring "github.com/komari-monitor/komari-agent/monitoring/unit"
 )
 
@@ -73,6 +74,46 @@ func GenerateReport() []byte {
 
 	processcount := monitoring.ProcessCount()
 	data["process"] = processcount
+
+	// GPU监控 - 根据标志决定详细程度
+	if flags.EnableGPU {
+		// 详细GPU监控模式
+		gpuInfo, err := monitoring.GetDetailedGPUInfo()
+		if err != nil {
+			message += fmt.Sprintf("failed to get detailed GPU info: %v\n", err)
+			// 降级到基础GPU信息
+			gpuNames, nameErr := monitoring.GetDetailedGPUHost()
+			if nameErr == nil && len(gpuNames) > 0 {
+				data["gpu"] = map[string]interface{}{
+					"models": gpuNames,
+				}
+			}
+		} else {
+			// 成功获取详细信息
+			gpuData := make([]map[string]interface{}, len(gpuInfo))
+			totalGPUUsage := 0.0
+			
+			for i, info := range gpuInfo {
+				gpuData[i] = map[string]interface{}{
+					"name":         info.Name,
+					"memory_total": info.MemoryTotal,
+					"memory_used":  info.MemoryUsed,
+					"utilization":  info.Utilization,
+					"temperature":  info.Temperature,
+				}
+				totalGPUUsage += info.Utilization
+			}
+			
+			avgGPUUsage := totalGPUUsage / float64(len(gpuInfo))
+			
+			data["gpu"] = map[string]interface{}{
+				"count":          len(gpuInfo),
+				"average_usage":  avgGPUUsage,
+				"detailed_info":  gpuData,
+			}
+		}
+	}
+	// 基础模式下，GPU信息已在basicInfo中处理
 
 	data["message"] = message
 

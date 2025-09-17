@@ -77,6 +77,7 @@ func isPhysicalDisk(part disk.PartitionStat) bool {
 		"/dev/mqueue",
 		"/etc/resolv.conf",
 		"/etc/host", // /etc/hosts,/etc/hostname
+		"/dev/hugepages",
 	}
 	for _, mp := range mountpointsToExclude {
 		if mountpoint == mp || strings.HasPrefix(mountpoint, mp) {
@@ -100,6 +101,7 @@ func isPhysicalDisk(part disk.PartitionStat) bool {
 		"sysfs",
 		"cgroup",
 		"mqueue",
+		"hugetlbfs",
 	}
 	for _, fs := range fstypeToExclude {
 		if fstype == fs || strings.HasPrefix(fstype, fs) {

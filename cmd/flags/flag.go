@@ -20,4 +20,5 @@ var (
 	CFAccessClientSecret string
 	MemoryIncludeCache   bool
 	CustomDNS            string
+	EnableGPU            bool   // 启用详细GPU监控
 )
