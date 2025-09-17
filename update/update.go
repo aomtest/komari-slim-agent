@@ -3,11 +3,13 @@ package update
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/blang/semver"
+	"github.com/komari-monitor/komari-agent/dnsresolver"
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
 )
 
@@ -45,7 +47,9 @@ func CheckAndUpdate() error {
 		return fmt.Errorf("failed to parse current version: %v", err)
 	}
 
-	// Create selfupdate configuration
+	// 使用dnsresolver创建自定义HTTP客户端并设置为全局默认客户端
+	// 这会影响所有HTTP请求，包括selfupdate库中的请求
+	http.DefaultClient = dnsresolver.GetHTTPClient(60 * time.Second) // Create selfupdate configuration
 	config := selfupdate.Config{}
 	updater, err := selfupdate.NewUpdater(config)
 	if err != nil {
