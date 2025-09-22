@@ -29,7 +29,7 @@ func Ram() RamInfo {
 	if runtime.GOOS == "windows" {
 		raminfo.Used = v.Total - v.Available
 	} else {
-		raminfo.Used = v.Used
+		raminfo.Used = v.Total - v.Free - v.Buffers - v.Cached
 	}
 
 	return raminfo
