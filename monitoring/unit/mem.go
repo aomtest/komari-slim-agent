@@ -1,6 +1,8 @@
 package monitoring
 
 import (
+	"runtime"
+
 	"github.com/komari-monitor/komari-agent/cmd/flags"
 	"github.com/shirou/gopsutil/v4/mem"
 )
@@ -24,7 +26,11 @@ func Ram() RamInfo {
 		return raminfo
 	}
 	raminfo.Total = v.Total
-	raminfo.Used = v.Total - v.Available
+	if runtime.GOOS == "windows" {
+		raminfo.Used = v.Total - v.Available
+	} else {
+		raminfo.Used = v.Used
+	}
 
 	return raminfo
 }
