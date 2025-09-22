@@ -22,15 +22,13 @@ var RootCmd = &cobra.Command{
 		log.Println("Komari Agent", update.CurrentVersion)
 		log.Println("Github Repo:", update.Repo)
 
-		// 设置自定义DNS解析器
+		// 设置 DNS 解析行为
 		if flags.CustomDNS != "" {
 			dnsresolver.SetCustomDNSServer(flags.CustomDNS)
 			log.Printf("Using custom DNS server: %s", flags.CustomDNS)
 		} else {
-			log.Printf("Using default DNS servers, primary: %s (failover servers available)", dnsresolver.DNSServers[0])
-			if len(dnsresolver.DNSServers) > 1 {
-				log.Printf("Available failover DNS servers: %v", dnsresolver.DNSServers[1:])
-			}
+			// 未设置则使用系统默认 DNS（不使用内置列表）
+			log.Printf("Using system default DNS resolver")
 		}
 
 		// Auto discovery
@@ -113,7 +111,7 @@ func init() {
 	RootCmd.PersistentFlags().StringVar(&flags.CFAccessClientID, "cf-access-client-id", "", "Cloudflare Access Client ID")
 	RootCmd.PersistentFlags().StringVar(&flags.CFAccessClientSecret, "cf-access-client-secret", "", "Cloudflare Access Client Secret")
 	RootCmd.PersistentFlags().BoolVar(&flags.MemoryIncludeCache, "memory-include-cache", false, "Include cache/buffer in memory usage")
-	RootCmd.PersistentFlags().StringVar(&flags.CustomDNS, "custom-dns", "", "Custom DNS server to use (e.g. 8.8.8.8, 114.114.114.114). By default, the program will use multiple built-in DNS servers with failover support.")
+	RootCmd.PersistentFlags().StringVar(&flags.CustomDNS, "custom-dns", "", "Custom DNS server to use (e.g. 8.8.8.8, 114.114.114.114). By default, the program uses the system DNS resolver.")
 	RootCmd.PersistentFlags().BoolVar(&flags.EnableGPU, "gpu", false, "Enable detailed GPU monitoring (usage, memory, multi-GPU support)")
 	RootCmd.PersistentFlags().ParseErrorsWhitelist.UnknownFlags = true
 }

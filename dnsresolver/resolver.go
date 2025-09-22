@@ -18,6 +18,7 @@ var (
 		"1.1.1.1:53",         // Cloudflare DNS，全球
 		"223.5.5.5:53",       // 阿里DNS，中国大陆
 		"119.29.29.29:53",    // DNSPod，中国大陆
+
 	}
 
 	// CustomDNSServer 自定义DNS服务器，可以通过命令行参数设置
@@ -40,38 +41,44 @@ func getCurrentDNSServer() string {
 	if CustomDNSServer != "" {
 		return CustomDNSServer
 	}
-	// 如果没有设置自定义DNS，返回默认的第一个
-	return DNSServers[0]
+	// 如果没有设置自定义DNS，返回空字符串，表示应使用系统默认解析器
+	return ""
 }
 
-// GetCustomResolver 返回一个使用指定DNS服务器的解析器
+// GetCustomResolver 返回一个解析器：
+// - 若设置了自定义 DNS：使用该服务器（并在失败时尝试内置列表作为兜底）。
+// - 若未设置自定义 DNS：返回系统默认解析器（不使用内置列表）。
 func GetCustomResolver() *net.Resolver {
+	// 未设置自定义 DNS，直接使用系统默认解析器
+	if getCurrentDNSServer() == "" {
+		return net.DefaultResolver
+	}
+
+	// 设置了自定义 DNS，则构造使用自定义 DNS 的解析器
 	return &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			d := net.Dialer{
-				Timeout: 10 * time.Second,
-			}
+			d := net.Dialer{Timeout: 10 * time.Second}
 
-			// 尝试自定义DNS或默认DNS
+			// 优先使用自定义 DNS 服务器
 			dnsServer := getCurrentDNSServer()
-			conn, err := d.DialContext(ctx, "udp", dnsServer)
-			if err == nil {
-				return conn, nil
-			}
-
-			// 如果连接失败，尝试其他DNS服务器
-			for _, server := range DNSServers {
-				if server != dnsServer { // 避免重复尝试
-					conn, err := d.DialContext(ctx, "udp", server)
-					if err == nil {
-						return conn, nil
-					}
+			if dnsServer != "" {
+				if conn, err := d.DialContext(ctx, "udp", dnsServer); err == nil {
+					return conn, nil
 				}
 			}
 
-			// 所有DNS服务器都失败，返回最后一次的错误
-			return nil, err
+			// 如果自定义DNS不可用，则尝试内置列表作为兜底
+			for _, server := range DNSServers {
+				if server == dnsServer {
+					continue
+				}
+				if conn, err := d.DialContext(ctx, "udp", server); err == nil {
+					return conn, nil
+				}
+			}
+
+			return nil, fmt.Errorf("no available DNS server")
 		},
 	}
 }
