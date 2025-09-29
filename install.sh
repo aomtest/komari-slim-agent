@@ -397,27 +397,50 @@ detect_init_system() {
         return
     fi
     
-    # Check for Alpine Linux or other OpenRC-based systems
-    if [ -f /etc/alpine-release ] || [ -f /sbin/openrc-run ]; then
+    # Alpine Linux MUST be checked first
+    # Alpine always uses OpenRC, even in containers where PID 1 might be different
+    if [ -f /etc/alpine-release ]; then
+        if command -v rc-service >/dev/null 2>&1 || [ -f /sbin/openrc-run ]; then
+            echo "openrc"
+            return
+        fi
+    fi
+    
+    # Get PID 1 process for other detection
+    local pid1_process=$(ps -p 1 -o comm= 2>/dev/null | tr -d ' ')
+    
+    # If PID 1 is systemd, use systemd
+    if [ "$pid1_process" = "systemd" ] || [ -d /run/systemd/system ]; then
+        if command -v systemctl >/dev/null 2>&1; then
+            # Additional verification that systemd is actually functioning
+            if systemctl list-units >/dev/null 2>&1; then
+                echo "systemd"
+                return
+            fi
+        fi
+    fi
+    
+    # Check for Gentoo OpenRC (PID 1 is openrc-init)
+    if [ "$pid1_process" = "openrc-init" ]; then
         if command -v rc-service >/dev/null 2>&1; then
             echo "openrc"
             return
         fi
     fi
     
-    # Check if systemd is actually PID 1 (not just installed)
-    if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
-        # Additional check: verify systemd is actually running
-        if systemctl --version >/dev/null 2>&1 && [ "$(ps -p 1 -o comm=)" = "systemd" ]; then
-            echo "systemd"
+    # Check for other OpenRC systems (not Alpine, already handled)
+    # Some systems use traditional init with OpenRC
+    if [ "$pid1_process" = "init" ] && [ ! -f /etc/alpine-release ]; then
+        # Check if OpenRC is actually managing services
+        if [ -d /run/openrc ] && command -v rc-service >/dev/null 2>&1; then
+            echo "openrc"
             return
         fi
-    fi
-    
-    # Check for OpenRC (generic check)
-    if command -v rc-service >/dev/null 2>&1 && [ -d /etc/init.d ]; then
-        echo "openrc"
-        return
+        # Check for OpenRC files
+        if [ -f /sbin/openrc ] && command -v rc-service >/dev/null 2>&1; then
+            echo "openrc"
+            return
+        fi
     fi
     
     # Check for OpenWrt's procd
@@ -429,6 +452,20 @@ detect_init_system() {
     # Check for macOS launchd
     if [ "$os_name" = "darwin" ] && command -v launchctl >/dev/null 2>&1; then
         echo "launchd"
+        return
+    fi
+    
+    # Fallback: if systemctl exists and appears functional, assume systemd
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl list-units >/dev/null 2>&1; then
+            echo "systemd"
+            return
+        fi
+    fi
+    
+    # Last resort: check for OpenRC without other indicators
+    if command -v rc-service >/dev/null 2>&1 && [ -d /etc/init.d ]; then
+        echo "openrc"
         return
     fi
     
