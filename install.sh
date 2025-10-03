@@ -389,8 +389,94 @@ log_success "Komari-agent installed to ${GREEN}$komari_agent_path${NC}"
 # Detect init system and configure service
 log_step "Configuring system service..."
 
-# Check if running on NixOS
-if [ -f /etc/NIXOS ]; then
+# Function to detect actual init system
+detect_init_system() {
+    # Check if running on NixOS (special case)
+    if [ -f /etc/NIXOS ]; then
+        echo "nixos"
+        return
+    fi
+    
+    # Alpine Linux MUST be checked first
+    # Alpine always uses OpenRC, even in containers where PID 1 might be different
+    if [ -f /etc/alpine-release ]; then
+        if command -v rc-service >/dev/null 2>&1 || [ -f /sbin/openrc-run ]; then
+            echo "openrc"
+            return
+        fi
+    fi
+    
+    # Get PID 1 process for other detection
+    local pid1_process=$(ps -p 1 -o comm= 2>/dev/null | tr -d ' ')
+    
+    # If PID 1 is systemd, use systemd
+    if [ "$pid1_process" = "systemd" ] || [ -d /run/systemd/system ]; then
+        if command -v systemctl >/dev/null 2>&1; then
+            # Additional verification that systemd is actually functioning
+            if systemctl list-units >/dev/null 2>&1; then
+                echo "systemd"
+                return
+            fi
+        fi
+    fi
+    
+    # Check for Gentoo OpenRC (PID 1 is openrc-init)
+    if [ "$pid1_process" = "openrc-init" ]; then
+        if command -v rc-service >/dev/null 2>&1; then
+            echo "openrc"
+            return
+        fi
+    fi
+    
+    # Check for other OpenRC systems (not Alpine, already handled)
+    # Some systems use traditional init with OpenRC
+    if [ "$pid1_process" = "init" ] && [ ! -f /etc/alpine-release ]; then
+        # Check if OpenRC is actually managing services
+        if [ -d /run/openrc ] && command -v rc-service >/dev/null 2>&1; then
+            echo "openrc"
+            return
+        fi
+        # Check for OpenRC files
+        if [ -f /sbin/openrc ] && command -v rc-service >/dev/null 2>&1; then
+            echo "openrc"
+            return
+        fi
+    fi
+    
+    # Check for OpenWrt's procd
+    if command -v uci >/dev/null 2>&1 && [ -f /etc/rc.common ]; then
+        echo "procd"
+        return
+    fi
+    
+    # Check for macOS launchd
+    if [ "$os_name" = "darwin" ] && command -v launchctl >/dev/null 2>&1; then
+        echo "launchd"
+        return
+    fi
+    
+    # Fallback: if systemctl exists and appears functional, assume systemd
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl list-units >/dev/null 2>&1; then
+            echo "systemd"
+            return
+        fi
+    fi
+    
+    # Last resort: check for OpenRC without other indicators
+    if command -v rc-service >/dev/null 2>&1 && [ -d /etc/init.d ]; then
+        echo "openrc"
+        return
+    fi
+    
+    echo "unknown"
+}
+
+init_system=$(detect_init_system)
+log_info "Detected init system: ${GREEN}$init_system${NC}"
+
+# Handle each init system
+if [ "$init_system" = "nixos" ]; then
     log_warning "NixOS detected. System services must be configured declaratively."
     log_info "Please add the following to your NixOS configuration:"
     echo ""
@@ -409,32 +495,7 @@ if [ -f /etc/NIXOS ]; then
     echo ""
     log_info "Then run: sudo nixos-rebuild switch"
     log_warning "Service not started automatically on NixOS. Please rebuild your configuration."
-elif command -v systemctl >/dev/null 2>&1; then
-    # Systemd service configuration
-    log_info "Using systemd for service management"
-    service_file="/etc/systemd/system/${service_name}.service"
-    cat > "$service_file" << EOF
-[Unit]
-Description=Komari Agent Service
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=${komari_agent_path} ${komari_args}
-WorkingDirectory=${target_dir}
-Restart=always
-User=root
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    # Reload systemd and start service
-    systemctl daemon-reload
-    systemctl enable ${service_name}.service
-    systemctl start ${service_name}.service
-    log_success "Systemd service configured and started"
-elif command -v rc-service >/dev/null 2>&1; then
+elif [ "$init_system" = "openrc" ]; then
     # OpenRC service configuration
     log_info "Using OpenRC for service management"
     service_file="/etc/init.d/${service_name}"
@@ -462,7 +523,32 @@ EOF
     rc-update add ${service_name} default
     rc-service ${service_name} start
     log_success "OpenRC service configured and started"
-elif command -v uci >/dev/null 2>&1; then
+elif [ "$init_system" = "systemd" ]; then
+    # Systemd service configuration
+    log_info "Using systemd for service management"
+    service_file="/etc/systemd/system/${service_name}.service"
+    cat > "$service_file" << EOF
+[Unit]
+Description=Komari Agent Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=${komari_agent_path} ${komari_args}
+WorkingDirectory=${target_dir}
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Reload systemd and start service
+    systemctl daemon-reload
+    systemctl enable ${service_name}.service
+    systemctl start ${service_name}.service
+    log_success "Systemd service configured and started"
+elif [ "$init_system" = "procd" ]; then
     # procd service configuration (OpenWrt)
     log_info "Using procd for service management"
     service_file="/etc/init.d/${service_name}"
@@ -502,7 +588,7 @@ EOF
     /etc/init.d/${service_name} enable
     /etc/init.d/${service_name} start
     log_success "procd service configured and started"
-elif [ "$os_name" = "darwin" ] && command -v launchctl >/dev/null 2>&1; then
+elif [ "$init_system" = "launchd" ]; then
     # macOS launchd service configuration
     log_info "Using launchd for service management"
     
@@ -581,7 +667,8 @@ EOF
         fi
     fi
 else
-    log_error "Unsupported init system (systemd, openrc, procd, or launchd not found)"
+    log_error "Unsupported or unknown init system detected: $init_system"
+    log_error "Supported init systems: systemd, openrc, procd, launchd"
     exit 1
 fi
 
