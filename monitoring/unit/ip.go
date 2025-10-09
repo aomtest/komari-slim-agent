@@ -108,7 +108,7 @@ func GetIPv6Address() (string, error) {
 		}
 
 		// 使用正则表达式从响应体中提取IPv6地址
-		re := regexp.MustCompile(`(([0-9A-Fa-f]{1,4}:){7})([0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){1,6}:)(([0-9A-Fa-f]{1,4}:){0,4})([0-9A-Fa-f]{1,4})`)
+		re := regexp.MustCompile(`(([0-9A-Fa-f]{1,4}:){7})([0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){1,6}:)(([0-9A-Fa-f]{1,4}:){0,4})([0-9A-Fa-f]{0,4})`)
 		ipv6 := re.FindString(string(body))
 		if ipv6 != "" {
 			log.Printf("Get IPV6 Success:  %s", ipv6)
