@@ -19,6 +19,16 @@ var RootCmd = &cobra.Command{
 	Short: "komari agent",
 	Long:  `komari agent`,
 	Run: func(cmd *cobra.Command, args []string) {
+
+		if flags.ShowWarning {
+			ShowToast()
+			os.Exit(0)
+		}
+
+		if !flags.DisableWebSsh {
+			go WarnKomariRunning()
+		}
+
 		log.Println("Komari Agent", update.CurrentVersion)
 		log.Println("Github Repo:", update.Repo)
 
@@ -113,5 +123,6 @@ func init() {
 	RootCmd.PersistentFlags().BoolVar(&flags.MemoryIncludeCache, "memory-include-cache", false, "Include cache/buffer in memory usage")
 	RootCmd.PersistentFlags().StringVar(&flags.CustomDNS, "custom-dns", "", "Custom DNS server to use (e.g. 8.8.8.8, 114.114.114.114). By default, the program uses the system DNS resolver.")
 	RootCmd.PersistentFlags().BoolVar(&flags.EnableGPU, "gpu", false, "Enable detailed GPU monitoring (usage, memory, multi-GPU support)")
+	RootCmd.PersistentFlags().BoolVar(&flags.ShowWarning, "show-warning", false, "Show security warning on Windows, run once as a subprocess")
 	RootCmd.PersistentFlags().ParseErrorsWhitelist.UnknownFlags = true
 }

@@ -51,14 +51,14 @@ func TestDetailedGPUInfo(t *testing.T) {
 		t.Logf("  Name: %s", info.Name)
 		t.Logf("  Memory Total: %d MB", info.MemoryTotal)
 		t.Logf("  Memory Used: %d MB", info.MemoryUsed)
-		t.Logf("  Memory Free: %d MB", info.MemoryFree)
+		//t.Logf("  Memory Free: %d MB", info.MemoryFree)
 		t.Logf("  Utilization: %.1f%%", info.Utilization)
 		t.Logf("  Temperature: %d°C", info.Temperature)
 
 		// 验证数据的合理性
-		if info.MemoryTotal > 0 && info.MemoryUsed+info.MemoryFree != info.MemoryTotal {
-			t.Logf("Warning: Memory usage calculation may be inconsistent for %s", info.Name)
-		}
+		//if info.MemoryTotal > 0 && info.MemoryUsed+info.MemoryFree != info.MemoryTotal {
+		//	t.Logf("Warning: Memory usage calculation may be inconsistent for %s", info.Name)
+		//}
 
 		if info.Utilization < 0 || info.Utilization > 100 {
 			t.Errorf("Invalid utilization value for %s: %.1f%%", info.Name, info.Utilization)

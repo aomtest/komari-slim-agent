@@ -20,5 +20,6 @@ var (
 	CFAccessClientSecret string
 	MemoryIncludeCache   bool
 	CustomDNS            string
-	EnableGPU            bool   // 启用详细GPU监控
+	EnableGPU            bool // 启用详细GPU监控
+	ShowWarning          bool // Windows 上显示安全警告，作为子进程运行一次
 )
