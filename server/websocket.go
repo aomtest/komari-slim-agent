@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -91,12 +92,15 @@ func EstablishWebSocketConnection() {
 }
 
 func connectWebSocket(websocketEndpoint string) (*ws.SafeConn, error) {
-	// 使用dnsresolver获取自定义网络拨号器
-	netDialer := dnsresolver.GetNetDialer(5 * time.Second)
-
+	// 使用自定义解析和连接策略（IPv4 优先，较长超时）
 	dialer := &websocket.Dialer{
-		HandshakeTimeout: 5 * time.Second,
-		NetDialContext:   netDialer.DialContext,
+		HandshakeTimeout: 15 * time.Second,
+		NetDialContext:   dnsresolver.GetDialContext(15 * time.Second),
+	}
+
+	// 可选：忽略 TLS 证书（当用户显式设置）
+	if flags.IgnoreUnsafeCert {
+		dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
 	// 创建请求头并添加Cloudflare Access头部
@@ -165,12 +169,13 @@ func establishTerminalConnection(token, id, endpoint string) {
 	endpoint = strings.TrimSuffix(endpoint, "/") + "/api/clients/terminal?token=" + token + "&id=" + id
 	endpoint = "ws" + strings.TrimPrefix(endpoint, "http")
 
-	// 使用dnsresolver获取自定义网络拨号器
-	netDialer := dnsresolver.GetNetDialer(5 * time.Second)
-
+	// 使用与主 WS 相同的拨号策略
 	dialer := &websocket.Dialer{
-		HandshakeTimeout: 5 * time.Second,
-		NetDialContext:   netDialer.DialContext,
+		HandshakeTimeout: 15 * time.Second,
+		NetDialContext:   dnsresolver.GetDialContext(15 * time.Second),
+	}
+	if flags.IgnoreUnsafeCert {
+		dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
 	// 创建请求头并添加Cloudflare Access头部
