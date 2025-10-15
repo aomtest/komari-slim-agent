@@ -92,23 +92,9 @@ func EstablishWebSocketConnection() {
 }
 
 func connectWebSocket(websocketEndpoint string) (*ws.SafeConn, error) {
-	// 使用自定义解析和连接策略（IPv4 优先，较长超时）
-	dialer := &websocket.Dialer{
-		HandshakeTimeout: 15 * time.Second,
-		NetDialContext:   dnsresolver.GetDialContext(15 * time.Second),
-	}
+	dialer := newWSDialer()
 
-	// 可选：忽略 TLS 证书（当用户显式设置）
-	if flags.IgnoreUnsafeCert {
-		dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	}
-
-	// 创建请求头并添加Cloudflare Access头部
-	headers := http.Header{}
-	if flags.CFAccessClientID != "" && flags.CFAccessClientSecret != "" {
-		headers.Set("CF-Access-Client-Id", flags.CFAccessClientID)
-		headers.Set("CF-Access-Client-Secret", flags.CFAccessClientSecret)
-	}
+	headers := newWSHeaders()
 
 	conn, resp, err := dialer.Dial(websocketEndpoint, headers)
 	if err != nil {
@@ -170,20 +156,9 @@ func establishTerminalConnection(token, id, endpoint string) {
 	endpoint = "ws" + strings.TrimPrefix(endpoint, "http")
 
 	// 使用与主 WS 相同的拨号策略
-	dialer := &websocket.Dialer{
-		HandshakeTimeout: 15 * time.Second,
-		NetDialContext:   dnsresolver.GetDialContext(15 * time.Second),
-	}
-	if flags.IgnoreUnsafeCert {
-		dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	}
+	dialer := newWSDialer()
 
-	// 创建请求头并添加Cloudflare Access头部
-	headers := http.Header{}
-	if flags.CFAccessClientID != "" && flags.CFAccessClientSecret != "" {
-		headers.Set("CF-Access-Client-Id", flags.CFAccessClientID)
-		headers.Set("CF-Access-Client-Secret", flags.CFAccessClientSecret)
-	}
+	headers := newWSHeaders()
 
 	conn, _, err := dialer.Dial(endpoint, headers)
 	if err != nil {
@@ -196,4 +171,26 @@ func establishTerminalConnection(token, id, endpoint string) {
 	if conn != nil {
 		conn.Close()
 	}
+}
+
+// newWSDialer 构造统一的 WebSocket 拨号器（自定义解析、IPv4/IPv6 动态排序、可选 TLS 忽略）
+func newWSDialer() *websocket.Dialer {
+	d := &websocket.Dialer{
+		HandshakeTimeout: 15 * time.Second,
+		NetDialContext:   dnsresolver.GetDialContext(15 * time.Second),
+	}
+	if flags.IgnoreUnsafeCert {
+		d.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+	return d
+}
+
+// newWSHeaders 统一构造 WS 请求头（含 Cloudflare Access 头）
+func newWSHeaders() http.Header {
+	headers := http.Header{}
+	if flags.CFAccessClientID != "" && flags.CFAccessClientSecret != "" {
+		headers.Set("CF-Access-Client-Id", flags.CFAccessClientID)
+		headers.Set("CF-Access-Client-Secret", flags.CFAccessClientSecret)
+	}
+	return headers
 }

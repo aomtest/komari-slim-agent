@@ -87,7 +87,6 @@ func tryUploadData(data map[string]interface{}) error {
 		req.Header.Set("CF-Access-Client-Secret", flags.CFAccessClientSecret)
 	}
 
-	// 使用dnsresolver获取自定义HTTP客户端
 	client := dnsresolver.GetHTTPClient(30 * time.Second)
 
 	resp, err := client.Do(req)

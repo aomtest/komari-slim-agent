@@ -2,6 +2,7 @@ package dnsresolver
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/komari-monitor/komari-agent/cmd/flags"
 )
 
 var (
@@ -110,57 +113,64 @@ func GetCustomResolver() *net.Resolver {
 }
 
 // GetHTTPClient 返回一个使用自定义DNS解析器的HTTP客户端
-func GetHTTPClient(timeout time.Duration) *http.Client {
+// buildTransport 构建带有自定义解析/拨号策略的 HTTP 传输层，可注入 TLS 配置
+func buildTransport(timeout time.Duration, tlsConfig *tls.Config) *http.Transport {
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
-
 	customResolver := GetCustomResolver()
-
-	return &http.Client{
-		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				host, port, err := net.SplitHostPort(addr)
-				if err != nil {
-					return nil, err
+	return &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
+			ips, err := customResolver.LookupHost(ctx, host)
+			if err != nil {
+				return nil, err
+			}
+			// 根据本机是否具备 IPv4 动态排序
+			preferIPv4 := preferIPv4First()
+			sort.SliceStable(ips, func(i, j int) bool {
+				ip1 := net.ParseIP(ips[i])
+				ip2 := net.ParseIP(ips[j])
+				if ip1 == nil || ip2 == nil {
+					return false
 				}
-				ips, err := customResolver.LookupHost(ctx, host)
-				if err != nil {
-					return nil, err
+				if preferIPv4 {
+					return ip1.To4() != nil && ip2.To4() == nil
 				}
-				// 根据本机是否具备 IPv4 动态排序
-				preferIPv4 := preferIPv4First()
-				sort.SliceStable(ips, func(i, j int) bool {
-					ip1 := net.ParseIP(ips[i])
-					ip2 := net.ParseIP(ips[j])
-					if ip1 == nil || ip2 == nil {
-						return false
-					}
-					if preferIPv4 {
-						return ip1.To4() != nil && ip2.To4() == nil
-					}
-					// IPv6 优先
-					return ip1.To4() == nil && ip2.To4() != nil
-				})
-				for _, ip := range ips {
-					dialer := &net.Dialer{
-						Timeout:   30 * time.Second,
-						KeepAlive: 30 * time.Second,
-						DualStack: true,
-					}
-					conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip, port))
-					if err == nil {
-						return conn, nil
-					}
+				// IPv6 优先
+				return ip1.To4() == nil && ip2.To4() != nil
+			})
+			for _, ip := range ips {
+				dialer := &net.Dialer{
+					Timeout:   timeout,
+					KeepAlive: 30 * time.Second,
+					DualStack: true,
 				}
-				return nil, fmt.Errorf("failed to dial to any of the resolved IPs")
-			},
-			MaxIdleConns:          10,
-			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
+				conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip, port))
+				if err == nil {
+					return conn, nil
+				}
+			}
+			return nil, fmt.Errorf("failed to dial to any of the resolved IPs")
 		},
+		MaxIdleConns:          10,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		TLSClientConfig:       tlsConfig,
+		ForceAttemptHTTP2:     true,
+	}
+}
+
+func GetHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Transport: buildTransport(timeout, &tls.Config{
+			InsecureSkipVerify: flags.IgnoreUnsafeCert,
+		}),
 		Timeout: timeout,
 	}
 }
