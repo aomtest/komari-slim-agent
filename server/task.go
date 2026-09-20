@@ -10,9 +10,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
-	"os/exec"
-	"runtime"
 	"strings"
 	"time"
 
@@ -21,111 +18,6 @@ import (
 	"github.com/komari-monitor/komari-agent/ws"
 	ping "github.com/prometheus-community/pro-bing"
 )
-
-func NewTask(task_id, command string) {
-	if task_id == "" {
-		return
-	}
-	if strings.TrimSpace(command) == "" {
-		uploadTaskResult(task_id, "No command provided", 0, time.Now())
-		return
-	}
-	if flags.DisableWebSsh {
-		uploadTaskResult(task_id, "Remote control is disabled.", -1, time.Now())
-		return
-	}
-	log.Printf("Executing task %s with command: %s", task_id, command)
-	result, exitCode := runTaskCommand(command)
-	uploadTaskResult(task_id, result, exitCode, time.Now())
-}
-
-func runTaskCommand(command string) (string, int) {
-	cmd, cleanup, err := buildTaskCommand(command)
-	if err != nil {
-		return err.Error(), -1
-	}
-	defer cleanup()
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err = cmd.Run()
-
-	result := stdout.String()
-	if stderr.Len() > 0 {
-		result = appendErrorResult(result, stderr.String())
-	}
-	result = strings.ReplaceAll(result, "\r\n", "\n")
-	exitCode := 0
-	if err != nil {
-		if exitError, ok := err.(*exec.ExitError); ok {
-			exitCode = exitError.ExitCode()
-		} else {
-			result = appendErrorResult(result, err.Error())
-			exitCode = -1
-		}
-	}
-
-	return result, exitCode
-}
-
-func buildTaskCommand(command string) (*exec.Cmd, func(), error) {
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		scriptFile, err := os.CreateTemp("", "komari-task-*.ps1")
-		if err != nil {
-			return nil, func() {}, err
-		}
-		cleanup := func() {
-			_ = os.Remove(scriptFile.Name())
-		}
-		if _, err := scriptFile.Write([]byte{0xEF, 0xBB, 0xBF}); err != nil {
-			_ = scriptFile.Close()
-			cleanup()
-			return nil, func() {}, err
-		}
-		script := "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n" + command
-		if _, err := scriptFile.WriteString(script); err != nil {
-			_ = scriptFile.Close()
-			cleanup()
-			return nil, func() {}, err
-		}
-		if err := scriptFile.Close(); err != nil {
-			cleanup()
-			return nil, func() {}, err
-		}
-		cmd = exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptFile.Name())
-		return cmd, cleanup, nil
-	} else {
-		cmd = exec.Command("sh", "-s")
-		cmd.Stdin = strings.NewReader(command)
-	}
-	return cmd, func() {}, nil
-}
-
-func appendErrorResult(result, err string) string {
-	if result == "" {
-		return err
-	}
-	return result + "\n" + err
-}
-
-func uploadTaskResult(taskID, result string, exitCode int, finishedAt time.Time) {
-	payload := v2.Request{
-		JSONRPC: v2.Version,
-		Method:  v2.MethodAgentTaskResult,
-		Params: v2.TaskResultParams{
-			TaskID:     taskID,
-			Result:     result,
-			ExitCode:   exitCode,
-			FinishedAt: finishedAt,
-		},
-	}
-	if err := postV2RPC(payload); err != nil {
-		log.Printf("Failed to upload task result: %v", err)
-	}
-}
 
 // resolveIP 解析域名到 IP 地址，排除 DNS 查询时间
 func resolveIP(target string) (string, error) {

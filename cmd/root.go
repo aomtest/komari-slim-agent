@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -19,7 +18,7 @@ import (
 	"github.com/komari-monitor/komari-agent/monitoring/netstatic"
 	monitoring "github.com/komari-monitor/komari-agent/monitoring/unit"
 	"github.com/komari-monitor/komari-agent/server"
-	"github.com/komari-monitor/komari-agent/update"
+	"github.com/komari-monitor/komari-agent/version"
 	"github.com/spf13/cobra"
 
 	pkg_flags "github.com/komari-monitor/komari-agent/cmd/flags"
@@ -27,18 +26,11 @@ import (
 
 var flags = pkg_flags.GlobalConfig
 
-var warningPanelHost, warningRunAsUser string
-
 var RootCmd = &cobra.Command{
 	Use:   "komari-agent",
 	Short: "komari agent",
 	Long:  `komari agent`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Notification helpers must not load the service's config or credentials.
-		if flags.ShowWarning {
-			ShowToast()
-			return nil
-		}
 		loadFromEnv() // 从环境变量加载配置，覆盖解析
 		if flags.ConfigFile != "" {
 			bytes, err := os.ReadFile(flags.ConfigFile)
@@ -57,13 +49,15 @@ var RootCmd = &cobra.Command{
 		stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 
-		stopWarning := startSecurityWarning(stopCtx)
-		defer stopWarning()
-		shutdown := newShutdownCoordinator(stopWarning, netstatic.Stop, os.Exit)
+		// 原实现由 shutdownCoordinator 串联「撤销 motd 安全警告 -> 停止 netstatic -> 退出」。
+		// 裁剪后 motd 警告机制已整体移除，这里直接完成剩余两步。
 		go func() {
 			<-stopCtx.Done()
 			log.Printf("shutting down gracefully...")
-			shutdown.shutdown(0)
+			if err := netstatic.Stop(); err != nil {
+				log.Printf("Failed to stop netstatic monitoring: %v", err)
+			}
+			os.Exit(0)
 		}()
 
 		if flags.MonthRotate != 0 {
@@ -83,8 +77,7 @@ var RootCmd = &cobra.Command{
 			}
 		}
 
-		log.Println("Komari Agent", update.CurrentVersion)
-		log.Println("Github Repo:", update.Repo)
+		log.Println("Komari Agent", version.CurrentVersion)
 
 		// 设置 DNS 解析行为
 		if flags.CustomDNS != "" {
@@ -117,16 +110,6 @@ var RootCmd = &cobra.Command{
 		if flags.IgnoreUnsafeCert {
 			http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 		}
-		// 自动更新
-		if !flags.DisableAutoUpdate {
-			err := update.CheckAndUpdate()
-			if handleUpdateCheckResult(err, shutdown) {
-				return nil
-			}
-			go update.DoUpdateWorks(func() {
-				shutdown.shutdown(42)
-			})
-		}
 		go server.DoUploadBasicInfoWorks()
 		for {
 			server.UpdateBasicInfo()
@@ -135,25 +118,8 @@ var RootCmd = &cobra.Command{
 	},
 }
 
-func handleUpdateCheckResult(err error, shutdown *shutdownCoordinator) bool {
-	if errors.Is(err, update.ErrRestartRequired) {
-		shutdown.shutdown(42)
-		return true
-	}
-	if err != nil {
-		log.Println("[ERROR]", err)
-	}
-	return false
-}
-
 func Execute() {
 	for i, arg := range os.Args {
-		if arg == "-autoUpdate" || arg == "--autoUpdate" {
-			log.Println("WARNING: The -autoUpdate flag is deprecated in version 0.0.9 and later. Use --disable-auto-update to configure auto-update behavior.")
-			// 从参数列表中移除该参数，防止cobra解析错误
-			os.Args = append(os.Args[:i], os.Args[i+1:]...)
-			break
-		}
 		if arg == "-memory-mode-available" || arg == "--memory-mode-available" {
 			//flags.MemoryIncludeCache = true
 			log.Println("WARNING: The --memory-mode-available flag is deprecated in version 1.0.70 and later. Use --memory-include-cache to report memory usage including cache/buffer.")
@@ -168,13 +134,15 @@ func Execute() {
 }
 
 func init() {
+	// 禁用 cobra 自带的 completion 子命令：它会为各类 shell 生成补全脚本，
+	// 与「只做监控上报」的职责无关，属于可裁剪的无必要交互面。
+	RootCmd.CompletionOptions.DisableDefaultCmd = true
+
 	RootCmd.PersistentFlags().StringVarP(&flags.Token, "token", "t", "", "API token")
 	//RootCmd.MarkPersistentFlagRequired("token")
 	RootCmd.PersistentFlags().StringVarP(&flags.Endpoint, "endpoint", "e", "", "API endpoint")
 	//RootCmd.MarkPersistentFlagRequired("endpoint")
 	RootCmd.PersistentFlags().StringVar(&flags.AutoDiscoveryKey, "auto-discovery", "", "Auto discovery key for the agent")
-	RootCmd.PersistentFlags().BoolVar(&flags.DisableAutoUpdate, "disable-auto-update", false, "Disable automatic updates")
-	RootCmd.PersistentFlags().BoolVar(&flags.DisableWebSsh, "disable-web-ssh", false, "Disable remote control(web ssh and rce)")
 	//RootCmd.PersistentFlags().BoolVar(&flags.MemoryModeAvailable, "memory-mode-available", false, "[deprecated]Report memory as available instead of used.")
 	RootCmd.PersistentFlags().Float64VarP(&flags.Interval, "interval", "i", 3.0, "Interval in seconds")
 	RootCmd.PersistentFlags().BoolVarP(&flags.IgnoreUnsafeCert, "ignore-unsafe-cert", "u", false, "Ignore unsafe certificate errors")
@@ -189,11 +157,6 @@ func init() {
 	RootCmd.PersistentFlags().BoolVar(&flags.MemoryReportRawUsed, "memory-exclude-bcf", false, "Use \"raminfo.Used = v.Total - v.Free - v.Buffers - v.Cached\" calculation for memory usage")
 	RootCmd.PersistentFlags().StringVar(&flags.CustomDNS, "custom-dns", "", "Custom DNS server to use (e.g. 8.8.8.8, 114.114.114.114). By default, the program uses the system DNS resolver.")
 	RootCmd.PersistentFlags().BoolVar(&flags.EnableGPU, "gpu", false, "Enable detailed GPU monitoring (usage, memory, multi-GPU support)")
-	RootCmd.PersistentFlags().BoolVar(&flags.ShowWarning, "show-warning", false, "Show security warning on Windows, run once as a subprocess")
-	RootCmd.PersistentFlags().StringVar(&warningPanelHost, "warning-panel-host", "", "Panel host shown by the notification helper")
-	RootCmd.PersistentFlags().StringVar(&warningRunAsUser, "warning-run-as-user", "", "Agent account shown by the notification helper")
-	_ = RootCmd.PersistentFlags().MarkHidden("warning-panel-host")
-	_ = RootCmd.PersistentFlags().MarkHidden("warning-run-as-user")
 	RootCmd.PersistentFlags().StringVar(&flags.CustomIpv4, "custom-ipv4", "", "Custom IPv4 address to use")
 	RootCmd.PersistentFlags().StringVar(&flags.CustomIpv6, "custom-ipv6", "", "Custom IPv6 address to use")
 	RootCmd.PersistentFlags().BoolVar(&flags.GetIpAddrFromNic, "get-ip-addr-from-nic", false, "Get IP address from network interface")

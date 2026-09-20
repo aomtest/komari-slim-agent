@@ -12,7 +12,7 @@ import (
 	monitoring "github.com/komari-monitor/komari-agent/monitoring/unit"
 	"github.com/komari-monitor/komari-agent/protocol/transport"
 	v2 "github.com/komari-monitor/komari-agent/protocol/v2"
-	"github.com/komari-monitor/komari-agent/update"
+	"github.com/komari-monitor/komari-agent/version"
 
 	pkg_flags "github.com/komari-monitor/komari-agent/cmd/flags"
 )
@@ -57,7 +57,7 @@ func uploadBasicInfo() error {
 		"disk_total":         monitoring.Disk().Total,
 		"gpu_name":           monitoring.GpuName(),
 		"virtualization":     monitoring.Virtualized(),
-		"version":            update.CurrentVersion,
+		"version":            version.CurrentVersion,
 	}
 
 	return tryUploadData(data)
