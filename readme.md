@@ -11,6 +11,39 @@
 >
 > 详见 [DISCLAIMER.md](./DISCLAIMER.md)
 
+## 安装
+
+### 一行命令（Linux / macOS）
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/aomtest/komari-slim-agent/main/install.sh) -e "https://你的面板地址" -t "你的-agent-token"
+```
+
+### 一行命令（Windows PowerShell，需管理员权限）
+
+```powershell
+iex "& { $(irm https://raw.githubusercontent.com/aomtest/komari-slim-agent/main/install.ps1) } -e 'https://你的面板地址' -t '你的-agent-token'"
+```
+
+### 手动安装
+
+从 [Releases](https://github.com/aomtest/komari-slim-agent/releases/latest) 下载对应平台的二进制文件，
+覆盖后重启服务即可。本版本已移除自升级功能，不会自动更新。
+
+### 安装脚本可选参数
+
+| 参数 | 说明 | 默认值 |
+| --- | --- | --- |
+| `--install-dir <路径>` | 安装目录 | Linux `/opt/komari`；Windows `%ProgramFiles%` 下的 `Komari` |
+| `--install-service-name <名称>` | 服务名 | `komari-agent` |
+| `--install-ghproxy <代理前缀>` | GitHub 加速代理前缀 | 空（脚本内置镜像自动重试） |
+| `--install-no-mirror` | 关闭自动镜像重试（仅 Linux） | 关闭 |
+| `--install-version <版本>` | 安装指定版本 | 最新版 |
+
+> 其余参数（如 `-e` / `-t`）会原样传给 agent 本体。
+>
+> 国内网络访问 `raw.githubusercontent.com` 可能失败，此时可先把脚本下载到本地再执行。
+
 ## 配置方式
 
 agent 参数可以通过命令行参数、环境变量或 JSON 配置文件传入。
@@ -42,8 +75,6 @@ export AGENT_TOKEN="your-token"
   "endpoint": "https://example.com",
   "token": "your-token",
   "interval": 3,
-  "disable_auto_update": false,
-  "disable_web_ssh": false,
   "ignore_unsafe_cert": false
 }
 ```
@@ -59,8 +90,6 @@ export AGENT_TOKEN="your-token"
 | `endpoint` | `AGENT_ENDPOINT` | `--endpoint`, `-e` | 面板地址 | `0.0.9` |
 | `token` | `AGENT_TOKEN` | `--token`, `-t` | agent token | `0.0.9` |
 | `interval` | `AGENT_INTERVAL` | `--interval`, `-i` | 数据采集间隔，单位秒 | `0.0.9` |
-| `disable_auto_update` | `AGENT_DISABLE_AUTO_UPDATE` | `--disable-auto-update` | 禁用自动更新 | `0.0.9` |
-| `disable_web_ssh` | `AGENT_DISABLE_WEB_SSH` | `--disable-web-ssh` | 禁用远程控制 | `0.0.9` |
 | `ignore_unsafe_cert` | `AGENT_IGNORE_UNSAFE_CERT` | `--ignore-unsafe-cert`, `-u` | 忽略不安全证书 | `0.0.9` |
 | `include_nics` | `AGENT_INCLUDE_NICS` | `--include-nics` | 仅统计指定网卡，逗号分隔 | `0.0.22` |
 | `exclude_nics` | `AGENT_EXCLUDE_NICS` | `--exclude-nics` | 排除指定网卡，逗号分隔 | `0.0.22` |
@@ -78,4 +107,4 @@ export AGENT_TOKEN="your-token"
 ./komari-agent --help
 ```
 
-详见 `cmd/flags/flags.go` 及 `cmd/root.go`
+详见 `cmd/flags/flag.go` 及 `cmd/root.go`
