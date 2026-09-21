@@ -77,7 +77,7 @@ var RootCmd = &cobra.Command{
 			}
 		}
 
-		log.Println("Komari Agent", version.CurrentVersion)
+		log.Println("komari-slim Agent", version.CurrentVersion)
 
 		// 设置 DNS 解析行为
 		if flags.CustomDNS != "" {
