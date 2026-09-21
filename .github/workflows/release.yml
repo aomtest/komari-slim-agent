@@ -1,5 +1,9 @@
 name: Release
 
+# 运行标题显式写成 tag 名。不设时 GitHub 默认用该 tag 指向的 commit message
+# 当标题；本仓库发版同样可能只推 tag 而不产生新 commit，届时标题会看不出是哪一版。
+run-name: Release ${{ github.ref_name }}
+
 # 打 tag 即触发：交叉编译全平台二进制并发布 Release。
 #
 # 为什么需要它：本仓库原先没有任何 CI，Release 由本地跑 build_all.sh
