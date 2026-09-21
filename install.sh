@@ -67,8 +67,16 @@ case $os_type in
         os_name="freebsd"
         ;;
     MINGW*|MSYS*|CYGWIN*)
-        os_name="windows"
-        target_dir="/c/komari"  # Use C:\komari on Windows
+        # 本脚本不适用于 Windows，原因有二：
+        #   1) 服务配置只实现了 systemd / OpenRC / launchd / NixOS / procd /
+        #      upstart，没有 Windows 分支（Windows 需要 nssm）
+        #   2) Windows 的 Release 资产名带 .exe，本脚本拼出的 URL 会 404
+        # 与其让用户看到 "Download failed from all sources ... Retry later"
+        # （那会把人误导到网络问题上），不如在这里直接说明并指向 ps1 脚本。
+        log_error "This script does not support Windows."
+        log_info  "Please use the Windows installer instead:"
+        log_info  '  iex "& { $(irm https://raw.githubusercontent.com/aomtest/komari-slim-agent/main/install.ps1) } -e <panel-url> -t <agent-token>"'
+        exit 1
         ;;
     *)
         log_error "Unsupported operating system: $os_type"

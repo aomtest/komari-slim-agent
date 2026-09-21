@@ -34,7 +34,7 @@ iex "& { $(irm https://raw.githubusercontent.com/aomtest/komari-slim-agent/main/
 
 | 参数 | 说明 | 默认值 |
 | --- | --- | --- |
-| `--install-dir <路径>` | 安装目录 | Linux `/opt/komari`；Windows `%ProgramFiles%\Komari`（install.ps1）或 `C:\komari`（install.sh） |
+| `--install-dir <路径>` | 安装目录 | Linux `/opt/komari`；Windows 请用 `install.ps1`（`install.sh` 不支持 Windows），默认 `%ProgramFiles%\Komari` |
 | `--install-service-name <名称>` | 服务名 | `komari-agent` |
 | `--install-ghproxy <代理前缀>` | GitHub 加速代理前缀 | 空（脚本内置镜像自动重试） |
 | `--install-no-mirror` | 关闭自动镜像重试（仅 Linux） | 关闭 |
