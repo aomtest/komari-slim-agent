@@ -48,13 +48,15 @@ jobs:
           - { goos: freebsd, goarch: arm,     ext: '' }
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           # 跟随 go.mod 里声明的版本，避免两处手动同步
           go-version-file: go.mod
+          # 本 workflow 把仓库检出在根目录，go.sum 就在根上，
+          # 所以 setup-go 的默认查找路径是对的，无需 cache-dependency-path。
           cache: true
 
       - name: Build
@@ -74,7 +76,7 @@ jobs:
           ls -la "build/${BIN}"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: komari-agent-${{ matrix.goos }}-${{ matrix.goarch }}
           path: build/komari-agent-${{ matrix.goos }}-${{ matrix.goarch }}*
@@ -85,7 +87,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        # 停在 v7 而不是最新的 v8：v8 改了下载行为
+        # （"will no longer attempt to unzip all downloaded files"，
+        #  且有 "Enforced checks (breaking)"），会破坏下面
+        # "下载多个 artifact 后 find + cp 拍平" 的逻辑。
+        uses: actions/download-artifact@v7
         with:
           path: artifacts
 
