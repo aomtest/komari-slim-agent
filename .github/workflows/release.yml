@@ -1,0 +1,109 @@
+name: Release
+
+# 打 tag 即触发：交叉编译全平台二进制并发布 Release。
+#
+# 为什么需要它：本仓库原先没有任何 CI，Release 由本地跑 build_all.sh
+# 交叉编译后手动上传 14 个二进制（约 160MB），既慢又依赖本机环境。
+# 本 workflow 与 build_all.sh 的平台矩阵、二进制命名、版本注入方式保持一致，
+# 可完全替代手工流程。
+#
+# 注意：这里**不把单元测试作为发布门禁**。server/task_test.go 的
+# TestHTTPPing 会真实请求外部主机（含 IPv6 地址与第三方域名），
+# 结果取决于网络环境，用作门禁会导致发布被无关的抖动卡住。
+# 需要跑测试请单独执行 `go test ./...`。
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # 平台矩阵与 build_all.sh 一致，共 14 个组合：
+      #   windows: amd64 / arm64 / 386        （排除 arm）
+      #   linux:   amd64 / arm64 / 386 / arm / loong64
+      #   darwin:  amd64 / arm64              （排除 386 / arm）
+      #   freebsd: amd64 / arm64 / 386 / arm  （loong64 仅 linux 支持）
+      matrix:
+        include:
+          - { goos: windows, goarch: amd64,   ext: '.exe' }
+          - { goos: windows, goarch: arm64,   ext: '.exe' }
+          - { goos: windows, goarch: '386',   ext: '.exe' }
+          - { goos: linux,   goarch: amd64,   ext: '' }
+          - { goos: linux,   goarch: arm64,   ext: '' }
+          - { goos: linux,   goarch: '386',   ext: '' }
+          - { goos: linux,   goarch: arm,     ext: '' }
+          - { goos: linux,   goarch: loong64, ext: '' }
+          - { goos: darwin,  goarch: amd64,   ext: '' }
+          - { goos: darwin,  goarch: arm64,   ext: '' }
+          - { goos: freebsd, goarch: amd64,   ext: '' }
+          - { goos: freebsd, goarch: arm64,   ext: '' }
+          - { goos: freebsd, goarch: '386',   ext: '' }
+          - { goos: freebsd, goarch: arm,     ext: '' }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          # 跟随 go.mod 里声明的版本，避免两处手动同步
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          # agent 为纯 Go，无 CGO 依赖，可直接交叉编译（不需要 zig）
+          CGO_ENABLED: '0'
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          BIN="komari-agent-${GOOS}-${GOARCH}${{ matrix.ext }}"
+          mkdir -p build
+          go build -trimpath \
+            -ldflags="-X github.com/komari-monitor/komari-agent/version.CurrentVersion=${VERSION}" \
+            -o "build/${BIN}" .
+          ls -la "build/${BIN}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: komari-agent-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: build/komari-agent-${{ matrix.goos }}-${{ matrix.goarch }}*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten and generate SHA256SUMS
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          cd release
+          # 只对二进制求校验和，避免把 SHA256SUMS 自身也算进去
+          sha256sum komari-agent-* > SHA256SUMS
+          echo "--- 资产清单 ---"
+          ls -la
+          echo "--- 校验和 ---"
+          cat SHA256SUMS
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
