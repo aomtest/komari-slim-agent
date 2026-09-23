@@ -417,14 +417,27 @@ https://ghproxy.net/${download_url}
 fi
 
 dl_ok=""
+# 先下到同目录的临时文件，最后再原子改名覆盖。
+#
+# 为什么不直接写 $komari_agent_path：
+#   1. 下载期间该文件处于「被打开待写」状态，此时 systemd exec 会失败并报
+#      Text file busy (status=203/EXEC)；而服务是 Restart=always，
+#      几次失败就会撞上 start-limit 彻底放弃启动；
+#   2. 下面这个镜像回退循环原本在每次失败后 `rm -f` 目标文件 ——
+#      也就是说一次失败的下载会把**正在运行的 agent 二进制删掉**。
+#
+# 同目录 rename 是原子的，旧 inode 对仍在运行的进程依然有效，
+# 因此目标路径任何时刻要么是完整的旧版本、要么是完整的新版本。
+tmp_agent_path="${komari_agent_path}.new"
+rm -f "$tmp_agent_path"
 for u in $download_urls; do
     log_step "Downloading $file_name ..."
     log_info "URL: ${CYAN}$u${NC}"
-    if curl -fL --connect-timeout 15 -o "$komari_agent_path" "$u" && [ -s "$komari_agent_path" ]; then
+    if curl -fL --connect-timeout 15 -o "$tmp_agent_path" "$u" && [ -s "$tmp_agent_path" ]; then
         dl_ok=1
         break
     fi
-    rm -f "$komari_agent_path"
+    rm -f "$tmp_agent_path"
 done
 
 if [ -z "$dl_ok" ]; then
@@ -433,8 +446,9 @@ if [ -z "$dl_ok" ]; then
     exit 1
 fi
 
-# Set executable permissions
-chmod +x "$komari_agent_path"
+# Set executable permissions, then move into place
+chmod +x "$tmp_agent_path"
+mv -f "$tmp_agent_path" "$komari_agent_path"
 if [ "$EUID" -eq 0 ] && [ "$service_user" != "root" ]; then
     chown "$service_user" "$komari_agent_path"
 fi
