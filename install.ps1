@@ -14,6 +14,7 @@ $ServiceName = "komari-agent"
 $GitHubProxy = ""
 $KomariArgs = @()
 $InstallVersion = ""
+$InstallSkipChecksum = $false
 
 # Parse script arguments
 for ($i = 0; $i -lt $args.Count; $i++) {
@@ -22,6 +23,7 @@ for ($i = 0; $i -lt $args.Count; $i++) {
         "--install-service-name" { $ServiceName = $args[$i + 1]; $i++; continue }
         "--install-ghproxy" { $GitHubProxy = $args[$i + 1]; $i++; continue }
         "--install-version" { $InstallVersion = $args[$i + 1]; $i++; continue }
+        "--install-skip-checksum" { $InstallSkipChecksum = $true; continue }
         Default { $KomariArgs += $args[$i] }
     }
 }
@@ -199,12 +201,20 @@ function Uninstall-Previous {
         }
     }
 
-    if (Test-Path $AgentPath) {
-        Log-Warning "Removing old binary..."
-        Remove-Item $AgentPath -Force
-    }
+    # NOTE: the old binary is deliberately NOT removed here any more.
+    #
+    # The previous order was "delete the old binary, then download". If every
+    # download source failed, the machine was left with no service, no unit and
+    # no program - the agent was dead and could not recover on its own.
+    # Replacement now happens via "Move-Item -Force" after the download has
+    # been verified, so a failed replacement still leaves the old binary intact.
+    #
+    # Stopping the service must still happen before the replacement, because
+    # Windows refuses to overwrite a running executable.
 }
-Uninstall-Previous
+
+# NOTE: the Uninstall-Previous call has moved below, to after the download has
+# been verified, matching the order used by install.sh.
 
 function Get-LatestSnapshotVersion {
     param([Parameter(Mandatory = $true)][string]$AssetName)
@@ -283,19 +293,122 @@ Log-Success "Installing komari-slim Agent version: $versionToInstall"
 
 # Construct download URL
 $BinaryName = "komari-agent-windows-$arch.exe"
-$DownloadUrl = if ($GitHubProxy) { "$GitHubProxy/https://github.com/aomtest/komari-slim-agent/releases/download/$versionToInstall/$BinaryName" } else { "https://github.com/aomtest/komari-slim-agent/releases/download/$versionToInstall/$BinaryName" }
+$ReleaseBase = "https://github.com/aomtest/komari-slim-agent/releases/download/$versionToInstall"
+$DownloadUrl = if ($GitHubProxy) { "$GitHubProxy/$ReleaseBase/$BinaryName" } else { "$ReleaseBase/$BinaryName" }
 
-# Download and install
-New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-Log-Info "URL: $DownloadUrl"
-try {
-    Invoke-WebRequest -Uri $DownloadUrl -OutFile $AgentPath -UseBasicParsing
+# Download sources: try mirrors in order when the direct URL fails, matching
+# install.sh. SHA256SUMS deliberately does NOT go through these - see the
+# verification section below.
+$DownloadUrls = @($DownloadUrl)
+if (-not $GitHubProxy) {
+    $DownloadUrls += @(
+        "https://ghfast.top/$DownloadUrl",
+        "https://gh-proxy.com/$DownloadUrl",
+        "https://ghproxy.net/$DownloadUrl"
+    )
 }
-catch {
-    Log-Error "Download failed: $_"
+
+New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+
+# Download to a temp file first. Writing straight to $AgentPath would leave a
+# half-written exe in place if the download were interrupted.
+$TempPath = "$AgentPath.new"
+if (Test-Path $TempPath) { Remove-Item $TempPath -Force }
+
+$downloaded = $false
+foreach ($url in $DownloadUrls) {
+    Log-Step "Downloading $BinaryName ..."
+    Log-Info "URL: $url"
+    try {
+        Invoke-WebRequest -Uri $url -OutFile $TempPath -UseBasicParsing
+        if ((Test-Path $TempPath) -and (Get-Item $TempPath).Length -gt 0) {
+            $downloaded = $true
+            break
+        }
+    }
+    catch {
+        Log-Warning "Download failed from this source: $_"
+    }
+    if (Test-Path $TempPath) { Remove-Item $TempPath -Force }
+}
+
+if (-not $downloaded) {
+    Log-Error "Download failed from all sources (direct + mirrors)."
+    Log-Error "Retry later, or specify --install-ghproxy <mirror-prefix> manually."
     exit 1
 }
-Log-Success "Downloaded and saved to $AgentPath"
+
+# Verification. SHA256SUMS is always fetched from GitHub directly, never
+# through a mirror: a mirror exists to speed up downloads, not to vouch for
+# origin. If both the binary and the checksum came from the same mirror, a
+# compromised mirror could forge the pair and the comparison would prove
+# nothing.
+Log-Step "Verifying checksum..."
+$SumsUrl = "$ReleaseBase/SHA256SUMS"
+$expected = $null
+try {
+    $sumsContent = (Invoke-WebRequest -Uri $SumsUrl -UseBasicParsing).Content
+    if ($sumsContent -is [byte[]]) { $sumsContent = [Text.Encoding]::UTF8.GetString($sumsContent) }
+    foreach ($line in ($sumsContent -split "`n")) {
+        $parts = @($line.Trim() -split '\s+')
+        if ($parts.Count -ge 2 -and $parts[1] -eq $BinaryName) { $expected = $parts[0]; break }
+    }
+}
+catch {
+    $expected = $null
+}
+
+# 0 = verified, 1 = checksum mismatch, 2 = could not verify
+if (-not $expected) {
+    $verifyStatus = 2
+}
+else {
+    try {
+        $actual = (Get-FileHash -Path $TempPath -Algorithm SHA256).Hash
+    }
+    catch {
+        $actual = $null
+    }
+    if (-not $actual) { $verifyStatus = 2 }
+    elseif ($actual.ToLower() -ne $expected.ToLower()) { $verifyStatus = 1 }
+    else { $verifyStatus = 0 }
+}
+
+switch ($verifyStatus) {
+    0 {
+        Log-Success "Checksum verified against the official SHA256SUMS."
+    }
+    1 {
+        Log-Error "Checksum mismatch for $BinaryName."
+        Log-Error "The downloaded file does not match the official SHA256SUMS - it was"
+        Log-Error "tampered with or corrupted. Installation aborted; nothing was changed."
+        Remove-Item $TempPath -Force
+        exit 1
+    }
+    default {
+        if ($InstallSkipChecksum) {
+            Log-Warning "Could not verify $BinaryName, continuing because --install-skip-checksum was given."
+            Log-Warning "The integrity of this binary has NOT been confirmed."
+        }
+        else {
+            Log-Error "Could not verify $BinaryName against the official SHA256SUMS."
+            Log-Error "  - SHA256SUMS was unreachable (GitHub may be blocked), or"
+            Log-Error "  - $BinaryName is not listed in it."
+            Log-Error "Nothing has been changed on this system."
+            Log-Error "Re-run with --install-skip-checksum to install without verification (not recommended)."
+            Remove-Item $TempPath -Force
+            exit 1
+        }
+    }
+}
+
+# Only touch system state after the download has been verified: stop the
+# service and remove the old service registration. This has to happen before
+# the replacement, because Windows refuses to overwrite a running executable.
+Uninstall-Previous
+
+Move-Item -Path $TempPath -Destination $AgentPath -Force
+Log-Success "Installed to $AgentPath"
 
 # Register and start service
 Log-Step "Configuring Windows service with nssm..."

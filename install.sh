@@ -45,6 +45,7 @@ github_proxy=""
 install_version="" # New parameter for specifying version
 install_dir_specified=false
 install_no_mirror=false # 关闭自动加速镜像
+install_skip_checksum=false # 跳过 SHA256 校验(仅用于无法访问 GitHub 的环境, 不推荐)
 service_user="${SUDO_USER:-$(id -un)}"
 user_service=false
 
@@ -108,6 +109,10 @@ while [ $# -gt 0 ]; do
             ;;
         --install-no-mirror) # 新增: 关闭自动加速镜像
             install_no_mirror=true
+            shift
+            ;;
+        --install-skip-checksum)
+            install_skip_checksum=true
             shift
             ;;
         --install*)
@@ -222,8 +227,10 @@ uninstall_previous() {
     fi
 }
 
-# Uninstall previous installation
-uninstall_previous
+# 注意: uninstall_previous 的调用点已下移到「下载并通过校验之后」。
+# 在下载之前就停服务、删 unit、删旧二进制,一旦所有下载源都失败(第 443 行 exit 1),
+# 机器上服务没了、旧二进制没了、新二进制也没有 —— agent 彻底死亡且无法自愈。
+# 现在先下载校验,失败时系统状态原封不动。
 
 install_dependencies() {
     log_step "Checking and installing dependencies..."
@@ -416,6 +423,45 @@ https://ghproxy.net/${download_url}
 "
 fi
 
+# 计算文件的 sha256。各系统工具名不同:coreutils 是 sha256sum,macOS 是
+# shasum -a 256,busybox 通常也提供 sha256sum,openssl 作为最后回退。
+sha256_of() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" 2>/dev/null | awk '{print $1}'
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1" 2>/dev/null | awk '{print $1}'
+    elif command -v openssl >/dev/null 2>&1; then
+        openssl dgst -sha256 "$1" 2>/dev/null | awk '{print $NF}'
+    else
+        return 1
+    fi
+}
+
+# 用官方 SHA256SUMS 校验 $1。
+# 返回 0=通过, 1=校验和不匹配(必须中止), 2=无法校验(取不到校验文件/无工具/未列出)。
+#
+# SHA256SUMS 一律直连 GitHub 取,绝不走镜像。镜像只负责「加速下载」,不能用它
+# 「证明来源」:如果二进制和校验和都来自同一个镜像,被入侵的镜像可以同时伪造
+# 两者,比对就完全失去意义 —— 这正是校验必须和镜像回退分开的原因。
+verify_checksum() {
+    local vc_file="$1"
+    local vc_url="https://github.com/aomtest/komari-slim-agent/releases/${download_path}/SHA256SUMS"
+    local vc_sums vc_expected vc_actual
+
+    vc_sums=$(curl -fsSL --connect-timeout 15 --max-time 60 "$vc_url" 2>/dev/null) || return 2
+    [ -n "$vc_sums" ] || return 2
+
+    # SHA256SUMS 是 sha256sum 的输出格式: <hash>  <filename>
+    vc_expected=$(printf '%s\n' "$vc_sums" | awk -v n="$file_name" '$2 == n { print $1; exit }')
+    [ -n "$vc_expected" ] || return 2
+
+    vc_actual=$(sha256_of "$vc_file") || return 2
+    [ -n "$vc_actual" ] || return 2
+
+    [ "$vc_actual" = "$vc_expected" ] || return 1
+    return 0
+}
+
 dl_ok=""
 # 先下到同目录的临时文件，最后再原子改名覆盖。
 #
@@ -446,12 +492,54 @@ if [ -z "$dl_ok" ]; then
     exit 1
 fi
 
-# Set executable permissions, then move into place
+# 下载成功不等于内容正确:镜像可能被入侵,也可能本身不可信。
+# 先校验,再决定要不要动系统状态。
+log_step "Verifying checksum..."
+verify_checksum "$tmp_agent_path"
+verify_status=$?
+case "$verify_status" in
+    0)
+        log_success "Checksum verified against the official SHA256SUMS."
+        ;;
+    1)
+        log_error "Checksum mismatch for $file_name."
+        log_error "The downloaded file does not match the official SHA256SUMS — it was"
+        log_error "tampered with or corrupted. Installation aborted; nothing was changed."
+        rm -f "$tmp_agent_path"
+        exit 1
+        ;;
+    *)
+        # 2 = 无法校验(取不到 SHA256SUMS / 没有 sha256 工具 / 文件未列出)
+        if [ "$install_skip_checksum" = "true" ]; then
+            log_warning "Could not verify $file_name, continuing because --install-skip-checksum was given."
+            log_warning "The integrity of this binary has NOT been confirmed."
+        else
+            log_error "Could not verify $file_name against the official SHA256SUMS."
+            log_error "  - SHA256SUMS was unreachable (GitHub may be blocked), or"
+            log_error "  - no sha256 tool is available (sha256sum / shasum / openssl), or"
+            log_error "  - $file_name is not listed in it."
+            log_error "Nothing has been changed on this system."
+            log_error "Re-run with --install-skip-checksum to install without verification (not recommended)."
+            rm -f "$tmp_agent_path"
+            exit 1
+        fi
+        ;;
+esac
+
+# 校验通过之后才动系统状态。此前 uninstall_previous 在下载之前执行,
+# 所有下载源都失败时会让机器上的服务、unit、旧二进制全部消失,
+# 而新二进制又没下下来 —— agent 彻底失联且无法自愈。
+uninstall_previous
+
+# chmod/chown 作用在临时文件上,且在 mv 之前完成。
+# 若先 mv 再 chown,中间会存在一个「目标文件属主为 root」的窗口:
+# umask 077 时 chmod +x 得到 0700,而 unit 里是 User=$service_user,
+# 服务若在该窗口内重启会 EACCES 并进入重启循环。
 chmod +x "$tmp_agent_path"
-mv -f "$tmp_agent_path" "$komari_agent_path"
 if [ "$EUID" -eq 0 ] && [ "$service_user" != "root" ]; then
-    chown "$service_user" "$komari_agent_path"
+    chown "$service_user" "$tmp_agent_path"
 fi
+mv -f "$tmp_agent_path" "$komari_agent_path"
 log_success "komari-slim agent installed to ${GREEN}$komari_agent_path${NC}"
 
 # Detect init system and configure service
