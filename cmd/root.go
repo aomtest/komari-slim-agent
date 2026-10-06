@@ -20,6 +20,7 @@ import (
 	"github.com/komari-monitor/komari-agent/server"
 	"github.com/komari-monitor/komari-agent/version"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	pkg_flags "github.com/komari-monitor/komari-agent/cmd/flags"
 )
@@ -31,7 +32,18 @@ var RootCmd = &cobra.Command{
 	Short: "komari agent",
 	Long:  `komari agent`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		loadFromEnv() // 从环境变量加载配置，覆盖解析
+		// 先记下命令行显式指定的 flag。
+		//
+		// 必须在 loadFromEnv 之前做：此刻 flags 里是「默认值 + 命令行值」，
+		// 还没被环境变量或配置文件污染，能准确反映用户到底传了什么。
+		var fromCLI []*pflag.Flag
+		cmd.Flags().Visit(func(f *pflag.Flag) { fromCLI = append(fromCLI, f) })
+
+		// 优先级（低 → 高）：配置文件 < 环境变量 < 命令行。
+		//
+		// 原先的顺序是「环境变量 → 配置文件」，于是配置文件反而成了最高优先级，
+		// 与 --token / --endpoint 这类命令行参数「应当覆盖一切」的直觉相反。
+		loadFromEnv()
 		if flags.ConfigFile != "" {
 			bytes, err := os.ReadFile(flags.ConfigFile)
 			if err != nil {
@@ -40,6 +52,16 @@ var RootCmd = &cobra.Command{
 			err = json.Unmarshal(bytes, flags)
 			if err != nil {
 				return fmt.Errorf("failed to parse config file: %w", err)
+			}
+		}
+		// 把命令行显式指定的值盖回去，使命令行真正拥有最高优先级。
+		//
+		// 用 Flags().Set 而不是手工维护「字段 → flag 名」映射：flag 是通过
+		// StringVar / BoolVar 绑定到字段指针的，Set 会自动写回对应字段；而 flag 名
+		// 并非字段名的简单变形（AutoDiscoveryKey → auto-discovery），字符串推导不可靠。
+		for _, f := range fromCLI {
+			if err := cmd.Flags().Set(f.Name, f.Value.String()); err != nil {
+				return fmt.Errorf("failed to reapply --%s: %w", f.Name, err)
 			}
 		}
 		if flags.PreferIPVersion != "" && flags.PreferIPVersion != "4" && flags.PreferIPVersion != "6" {
@@ -191,8 +213,14 @@ func loadFromEnv() {
 		case reflect.String:
 			field.SetString(envValue)
 		case reflect.Bool:
-			if strings.ToLower(envValue) == "true" || envValue == "1" {
+			// 必须同时支持 false。原先只在 "true"/"1" 时 SetBool(true)，
+			// 其余值什么都不做，于是环境变量只能把布尔项打开、永远无法关闭 ——
+			// 想用 AGENT_ENABLE_GPU=false 覆盖配置文件里的 true 是做不到的。
+			switch strings.ToLower(strings.TrimSpace(envValue)) {
+			case "true", "1", "yes", "on":
 				field.SetBool(true)
+			case "false", "0", "no", "off":
+				field.SetBool(false)
 			}
 		case reflect.Int:
 			if intVal, err := strconv.Atoi(envValue); err == nil {
