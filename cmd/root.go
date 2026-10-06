@@ -17,6 +17,7 @@ import (
 	"github.com/komari-monitor/komari-agent/dnsresolver"
 	"github.com/komari-monitor/komari-agent/monitoring/netstatic"
 	monitoring "github.com/komari-monitor/komari-agent/monitoring/unit"
+	"github.com/komari-monitor/komari-agent/selfupdate"
 	"github.com/komari-monitor/komari-agent/server"
 	"github.com/komari-monitor/komari-agent/version"
 	"github.com/spf13/cobra"
@@ -134,6 +135,20 @@ var RootCmd = &cobra.Command{
 		if flags.IgnoreUnsafeCert {
 			http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 		}
+
+		// 自更新触发监听。
+		//
+		// 未配置 --update-listen 时 NewListener 返回 nil,整个功能不启动、
+		// 不监听任何端口 —— 默认是关的,要显式开启才会生效。
+		if l := selfupdate.NewListener(flags.UpdateListen, flags.UpdateToken, func(t selfupdate.Trigger) {
+			log.Printf("[selfupdate] triggered from %s", t.From)
+			if err := selfupdate.Update(); err != nil {
+				log.Printf("[selfupdate] update failed: %v", err)
+			}
+		}); l != nil {
+			go l.Run()
+		}
+
 		go server.DoUploadBasicInfoWorks()
 		for {
 			server.UpdateBasicInfo()
@@ -205,6 +220,8 @@ func init() {
 	RootCmd.PersistentFlags().StringVar(&flags.ConfigFile, "config", "", "Path to the configuration file")
 	RootCmd.PersistentFlags().BoolVar(&flags.DisableCompression, "disable-compression", false, "Disable v2 gzip/permessage-deflate compression")
 	RootCmd.PersistentFlags().StringVar(&flags.PreferIPVersion, "prefer-ip-version", "", "Prefer IP version for dashboard connections: 4 or 6")
+	RootCmd.PersistentFlags().StringVar(&flags.UpdateListen, "update-listen", "", "Address to listen on for self-update triggers (e.g. 127.0.0.1:25775). Empty disables the feature")
+	RootCmd.PersistentFlags().StringVar(&flags.UpdateToken, "update-token", "", "Shared token required to trigger a self-update")
 	RootCmd.PersistentFlags().ParseErrorsWhitelist.UnknownFlags = true
 }
 

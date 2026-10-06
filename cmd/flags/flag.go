@@ -26,6 +26,13 @@ type Config struct {
 	DisableCompression  bool    `json:"disable_compression" env:"AGENT_DISABLE_COMPRESSION"`       // 禁用v2传输压缩
 	PreferIPVersion     string  `json:"prefer_ip_version" env:"AGENT_PREFER_IP_VERSION"`           // 面板连接优先使用的 IP 版本：4 或 6
 
+	// 自更新触发端口。留空则完全不启动监听（默认关闭）。
+	//
+	// 这个端口只做一件事：把收到的内容与 UpdateToken 比对，相等就触发一次自更新。
+	// 它不接受任何参数、不执行任何来自网络的指令，所以即使端口被扫到，攻击者
+	// 最多也只能触发一次"更新到最新版"——而这一步本身有版本检查兜底。
+	UpdateListen string `json:"update_listen" env:"AGENT_UPDATE_LISTEN"` // 监听地址，如 127.0.0.1:25775
+	UpdateToken  string `json:"update_token" env:"AGENT_UPDATE_TOKEN"`   // 触发令牌，需与面板侧配置一致
 }
 
 var GlobalConfig = &Config{}

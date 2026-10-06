@@ -28,7 +28,36 @@ iex "& { $(irm https://raw.githubusercontent.com/aomtest/komari-slim-agent/main/
 ### 手动安装
 
 从 [Releases](https://github.com/aomtest/komari-slim-agent/releases/latest) 下载对应平台的二进制文件，
-覆盖后重启服务即可。本版本已移除自升级功能，不会自动更新。
+覆盖后重启服务即可。本版本不会**自动**检查更新，但支持通过令牌远程触发（见下）。
+
+### 远程触发更新（可选，默认关闭）
+
+agent 可以监听一个端口，收到正确的令牌后更新到最新版。默认关闭，需要显式配置：
+
+```bash
+--update-listen 127.0.0.1:25775 --update-token "一段随机字符串"
+```
+
+环境变量为 `AGENT_UPDATE_LISTEN` / `AGENT_UPDATE_TOKEN`，配置文件里是 `update_listen` / `update_token`。
+
+在面板服务器上触发：
+
+```bash
+printf '你的令牌\n' | nc -w 2 <agent-ip> 25775
+```
+
+这个端口**只做一件事**：把收到的内容与令牌比对，相等就触发一次自更新。它不接受任何参数、
+不执行任何来自网络的指令，更新内容固定来自本仓库的 GitHub release 且要过 SHA-256 校验。
+所以即使端口暴露，攻击者能做的上限也只是「让 agent 更新到最新版」。
+
+几点说明：
+
+- **令牌不能为空**——为空时端口不会启动。一个不校验内容的触发端口等于给所有人开放
+  「反复重启 agent」的开关。
+- **已是最新版本时不做任何事**：agent 先查一次版本号，相同就直接返回。所以重复触发是安全的。
+- **两次触发至少间隔 5 分钟**，防止更新失败时反复重试。
+- **仅支持 Linux**。Windows 上运行中的 exe 无法被替换，agent 会明确拒绝而不是给出费解的失败。
+- 更新前会把当前二进制备份到 `backup/`，保留最近 3 个。
 
 ### 安装脚本可选参数
 
