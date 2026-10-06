@@ -41,19 +41,21 @@ var RootCmd = &cobra.Command{
 
 		// 优先级（低 → 高）：配置文件 < 环境变量 < 命令行。
 		//
-		// 原先的顺序是「环境变量 → 配置文件」，于是配置文件反而成了最高优先级，
-		// 与 --token / --endpoint 这类命令行参数「应当覆盖一切」的直觉相反。
-		loadFromEnv()
-		if flags.ConfigFile != "" {
-			bytes, err := os.ReadFile(flags.ConfigFile)
-			if err != nil {
-				return fmt.Errorf("failed to read config file: %w", err)
-			}
-			err = json.Unmarshal(bytes, flags)
-			if err != nil {
-				return fmt.Errorf("failed to parse config file: %w", err)
+		// 配置文件路径本身也遵循同样的规则，但命令行路径必须在加载环境变量
+		// 前保存，否则 AGENT_CONFIG_FILE 会让程序读取错误的文件。
+		cliConfigFile := ""
+		for _, f := range fromCLI {
+			if f.Name == "config" {
+				cliConfigFile = f.Value.String()
+				break
 			}
 		}
+		if configFile := configFilePath(cliConfigFile); configFile != "" {
+			if err := loadConfigFile(configFile); err != nil {
+				return err
+			}
+		}
+		loadFromEnv()
 		// 把命令行显式指定的值盖回去，使命令行真正拥有最高优先级。
 		//
 		// 用 Flags().Set 而不是手工维护「字段 → flag 名」映射：flag 是通过
@@ -138,6 +140,24 @@ var RootCmd = &cobra.Command{
 			server.EstablishWebSocketConnection()
 		}
 	},
+}
+
+func configFilePath(cliConfigFile string) string {
+	if cliConfigFile != "" {
+		return cliConfigFile
+	}
+	return os.Getenv("AGENT_CONFIG_FILE")
+}
+
+func loadConfigFile(path string) error {
+	bytes, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %w", err)
+	}
+	if err := json.Unmarshal(bytes, flags); err != nil {
+		return fmt.Errorf("failed to parse config file: %w", err)
+	}
+	return nil
 }
 
 func Execute() {
