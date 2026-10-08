@@ -18,6 +18,9 @@ import (
 // 为什么不用「退出 + 靠 Restart=always 拉起」:那要依赖 unit 里确实配了
 // Restart=always(用户可能改过),而 syscall.Exec 不依赖任何外部配置。
 // 代价是 PID 不变,但 agent 不依赖 PID 做任何判断。
+//
+// 另外一点实际好处:进程从未退出,所以不会计入 systemd 的启动频率统计。
+// 用「退出 + 拉起」的方式反复更新,理论上会撞上 StartLimitBurst 而被限流。
 func restartSelf(exe string) error {
 	log.Printf("[selfupdate] restarting in place with %s", exe)
 	// syscall.Exec 成功时不会返回 —— 进程映像已经被替换掉了。
