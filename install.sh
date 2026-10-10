@@ -704,6 +704,29 @@ ExecStart=${komari_agent_path} ${komari_args}
 WorkingDirectory=${target_dir}
 Restart=always
 
+# Sandboxing. The agent only ever writes inside its own directory (the binary
+# itself, backup/, net_static.json, auto-discovery.json), so the rest of the
+# filesystem can be read-only.
+#
+# ProtectHome is deliberately absent here: a user service usually installs
+# under $HOME, and ProtectHome would hide it.
+NoNewPrivileges=yes
+ProtectSystem=strict
+PrivateTmp=yes
+ReadWritePaths=${target_dir}
+# AF_NETLINK is how net.Interfaces() asks the kernel for this host's own
+# addresses; without it the agent reports none.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+# Files the agent creates (backup/, net_static.json) hold no secrets, but there
+# is no reason for them to be world-readable either.
+UMask=0077
+
 [Install]
 WantedBy=default.target
 EOF
@@ -725,6 +748,32 @@ ExecStart=${komari_agent_path} ${komari_args}
 WorkingDirectory=${target_dir}
 Restart=always
 User=${service_user}
+
+# Sandboxing. The agent only ever writes inside its own directory (the binary
+# itself, backup/, net_static.json, auto-discovery.json), so the rest of the
+# filesystem can be read-only.
+#
+# A fixed User= rather than DynamicUser=: when the mount namespace cannot be
+# created (an LXC container without nesting), systemd skips the mount-based
+# sandboxing for a unit with a static user, but refuses to start one with
+# DynamicUser= and exits 226/NAMESPACE.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=${target_dir}
+# AF_NETLINK is how net.Interfaces() asks the kernel for this host's own
+# addresses; without it the agent reports none.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+# Files the agent creates (backup/, net_static.json) hold no secrets, but there
+# is no reason for them to be world-readable either.
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target
