@@ -26,22 +26,6 @@ type GPUInfo struct {
 	Flags                 uint32 // 适配器标志特征位
 }
 
-func (g *GPUInfo) DedicatedVideoMemoryMB() uint64 {
-	return g.DedicatedVideoMemory / (1024 * 1024)
-}
-
-func (g *GPUInfo) DedicatedSystemMemoryMB() uint64 {
-	return g.DedicatedSystemMemory / (1024 * 1024)
-}
-
-func (g *GPUInfo) SharedSystemMemoryMB() uint64 {
-	return g.SharedSystemMemory / (1024 * 1024)
-}
-
-func (g *GPUInfo) LUIDString() string {
-	return fmt.Sprintf("0x%08X%08X", uint32(g.LUIDHighPart), g.LUIDLowPart)
-}
-
 const (
 	sOK               = uintptr(0x00000000)
 	ePointer          = uintptr(0x80004003)

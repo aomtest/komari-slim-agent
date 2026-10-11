@@ -177,10 +177,6 @@ func buildTransportWithPreferenceAndHTTP2(timeout time.Duration, tlsConfig *tls.
 	return transport
 }
 
-func GetHTTPClient(timeout time.Duration) *http.Client {
-	return getHTTPClient(timeout, "", true)
-}
-
 // GetHTTPClientWithPreference 返回一个使用自定义解析器并按指定 IP 版本排序的 HTTP 客户端。
 // preferIPVersion 为 "4" 或 "6" 时固定优先对应地址；为空时保留自动选择逻辑。
 func GetHTTPClientWithPreference(timeout time.Duration, preferIPVersion string) *http.Client {

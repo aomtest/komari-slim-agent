@@ -524,13 +524,3 @@ func SetNewConfig(newCfg NetStaticConfig) error {
 	return nil
 }
 
-func ForceReplaceRecord(rec map[string][]TrafficData) error {
-	mu.Lock()
-	defer mu.Unlock()
-	ensureInitLocked()
-	store.Interfaces = rec
-	// 不立即写盘，等下一次周期性保存或停止时写
-	// 同时做一次过期清理
-	purgeExpiredLocked()
-	return nil
-}
