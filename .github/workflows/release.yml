@@ -57,8 +57,14 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v7
         with:
-          # 跟随 go.mod 里声明的版本，避免两处手动同步
-          go-version-file: go.mod
+          # 显式钉到 1.27.3，不跟随 go.mod。
+          #
+          # go.mod 里的 `go 1.24.0` 是**语言版本下限**，不代表构建工具链；
+          # 按它取版本会装到 1.24.x。而 1.27.1 及更早存在
+          # CVE-2026-111943（crypto/x509 不吊销已泄露的 eMudhra 中间证书），
+          # 1.27.2 另修了 15 项 net/http、crypto/tls、html/template 等漏洞。
+          # 发布产物必须带上这些修复，所以在此固定版本。
+          go-version: '1.27.3'
           # 本 workflow 把仓库检出在根目录，go.sum 就在根上，
           # 所以 setup-go 的默认查找路径是对的，无需 cache-dependency-path。
           cache: true
