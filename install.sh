@@ -705,7 +705,7 @@ WorkingDirectory=${target_dir}
 Restart=always
 
 # Sandboxing. The agent only ever writes inside its own directory (the binary
-# itself, backup/, net_static.json, auto-discovery.json), so the rest of the
+# itself and backup/ and net_static.json), so the rest of the
 # filesystem can be read-only.
 #
 # ProtectHome is deliberately absent here: a user service usually installs
@@ -750,7 +750,7 @@ Restart=always
 User=${service_user}
 
 # Sandboxing. The agent only ever writes inside its own directory (the binary
-# itself, backup/, net_static.json, auto-discovery.json), so the rest of the
+# itself and backup/ and net_static.json), so the rest of the
 # filesystem can be read-only.
 #
 # A fixed User= rather than DynamicUser=: when the mount namespace cannot be

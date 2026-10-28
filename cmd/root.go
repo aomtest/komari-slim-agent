@@ -61,7 +61,7 @@ var RootCmd = &cobra.Command{
 		//
 		// 用 Flags().Set 而不是手工维护「字段 → flag 名」映射：flag 是通过
 		// StringVar / BoolVar 绑定到字段指针的，Set 会自动写回对应字段；而 flag 名
-		// 并非字段名的简单变形（AutoDiscoveryKey → auto-discovery），字符串推导不可靠。
+		// 并非字段名的简单变形（ReconnectInterval → reconnect-interval），字符串推导不可靠。
 		for _, f := range fromCLI {
 			if err := cmd.Flags().Set(f.Name, f.Value.String()); err != nil {
 				return fmt.Errorf("failed to reapply --%s: %w", f.Name, err)
@@ -113,13 +113,6 @@ var RootCmd = &cobra.Command{
 			log.Printf("Using system default DNS resolver")
 		}
 
-		// Auto discovery
-		if flags.AutoDiscoveryKey != "" {
-			err := handleAutoDiscovery()
-			if err != nil {
-				return fmt.Errorf("auto-discovery failed: %w", err)
-			}
-		}
 		diskList, err := monitoring.DiskList()
 		if err != nil {
 			log.Println("Failed to get disk list:", err)
@@ -199,7 +192,6 @@ func init() {
 	//RootCmd.MarkPersistentFlagRequired("token")
 	RootCmd.PersistentFlags().StringVarP(&flags.Endpoint, "endpoint", "e", "", "API endpoint")
 	//RootCmd.MarkPersistentFlagRequired("endpoint")
-	RootCmd.PersistentFlags().StringVar(&flags.AutoDiscoveryKey, "auto-discovery", "", "Auto discovery key for the agent")
 	//RootCmd.PersistentFlags().BoolVar(&flags.MemoryModeAvailable, "memory-mode-available", false, "[deprecated]Report memory as available instead of used.")
 	RootCmd.PersistentFlags().Float64VarP(&flags.Interval, "interval", "i", 3.0, "Interval in seconds")
 	RootCmd.PersistentFlags().BoolVarP(&flags.IgnoreUnsafeCert, "ignore-unsafe-cert", "u", false, "Ignore unsafe certificate errors")
